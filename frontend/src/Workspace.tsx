@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchSessionDetail, deleteSession, moveSession, renameGroup, renameSession } from '@/api/sessions'
+import { fetchSessionDetail, deleteSession, forkSession, moveSession, renameGroup, renameSession } from '@/api/sessions'
 import type { Attachment, Message, Session } from '@/api/types'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProfilePage } from '@/components/profile/ProfilePage'
@@ -58,6 +58,7 @@ export function Workspace({ username, onLogout }: Props) {
     }
   }, [sidebarOpen])
   const [newDialog, setNewDialog] = useState(false)
+  const [forkTarget, setForkTarget] = useState<Session | null>(null)
   const [moveTarget, setMoveTarget] = useState<Session | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Session | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -84,6 +85,22 @@ export function Workspace({ username, onLogout }: Props) {
       go(id)
     },
     [go, setView],
+  )
+
+  const doFork = useCallback(
+    async (cwd: string) => {
+      const src = forkTarget
+      if (!src) return
+      setForkTarget(null)
+      try {
+        const res = await forkSession(src.id, cwd)
+        await list.reload()
+        selectSession(res.id)
+      } catch (e) {
+        errors.show(e, 'Memindahkan session ke folder baru')
+      }
+    },
+    [forkTarget, list, selectSession, errors],
   )
 
   const startDraft = useCallback((cwd: string) => {
@@ -259,6 +276,7 @@ export function Workspace({ username, onLogout }: Props) {
         onClose={() => setSidebarOpen(false)}
         onSelect={selectSession}
         onNewSession={() => setNewDialog(true)}
+        onNewSessionInFolder={startDraft}
         onMoveRequest={setMoveTarget}
         onDeleteRequest={setDeleteTarget}
         onRenameSession={(x) => setRenameTarget({ kind: 'session', session: x })}
@@ -282,8 +300,10 @@ export function Workspace({ username, onLogout }: Props) {
             loading={detail.loading || (list.loading && list.sessions.length === 0 && !draft)}
             loadingOlder={detail.loadingOlder}
             hasMore={detail.hasMore}
+            context={activeId ? detail.context : null}
             error={detail.error}
             onNewSession={() => setNewDialog(true)}
+            onForkRequest={() => shownSession && setForkTarget(shownSession)}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
             onLoadOlder={() => void detail.loadOlder()}
             sending={pending !== null}
@@ -329,6 +349,16 @@ export function Workspace({ username, onLogout }: Props) {
         />
       )}
       {errors.dialog}
+      {forkTarget && (
+        <NewSessionDialog
+          title="Pindahkan ke folder lain"
+          description="Session disalin (fork) ke folder yang kamu pilih lalu dilanjutkan di sana. Session lama tetap ada."
+          confirmLabel="Fork ke folder ini"
+          recentCwds={recentCwds}
+          onCancel={() => setForkTarget(null)}
+          onCreate={(cwd) => void doFork(cwd)}
+        />
+      )}
       {newDialog && (
         <NewSessionDialog recentCwds={recentCwds} onCancel={() => setNewDialog(false)} onCreate={startDraft} />
       )}

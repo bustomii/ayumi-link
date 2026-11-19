@@ -61,3 +61,8 @@ export function enterTerminal(sessionId?: string): Promise<{ cwd: string }> {
 export function runTerminal(command: string): Promise<TermResult> {
   return api('/api/terminal', { method: 'POST', json: { command } })
 }
+
+/** Menyalin session ke folder kerja baru (session baru, yang lama tidak diubah). */
+export function forkSession(id: string, cwd: string): Promise<{ id: string; cwd: string }> {
+  return api(`/api/sessions/${encodeURIComponent(id)}/fork`, { method: 'POST', json: { cwd } })
+}

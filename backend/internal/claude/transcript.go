@@ -23,6 +23,8 @@ type Session struct {
 	Live       bool      `json:"live"`
 	Status     string    `json:"status,omitempty"`
 	Local      bool      `json:"local"` // dibuat lewat Ayumi Link (bisa dihapus permanen)
+	// CwdMissing: folder kerja session sudah tidak ada / tidak diizinkan; perlu fork ke folder lain.
+	CwdMissing bool `json:"cwdMissing,omitempty"`
 }
 
 // Message adalah satu pesan yang sudah dibersihkan dari noise tool.

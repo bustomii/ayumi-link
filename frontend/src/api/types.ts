@@ -10,6 +10,8 @@ export type Session = {
   status?: string
   /** Dibuat lewat Ayumi Link (bisa dihapus permanen). */
   local?: boolean
+  /** Folder kerja sudah tidak ada / tidak diizinkan: perlu fork ke folder lain. */
+  cwdMissing?: boolean
 }
 
 export type AttachmentKind = 'image' | 'pdf' | 'excel' | 'word'
@@ -30,12 +32,15 @@ export type Message = {
   attachments?: Attachment[]
 }
 
+export type ContextUsage = { used: number; window: number; model?: string }
+
 export type SessionDetail = {
   session: Session
   messages: Message[]
   hasMore: boolean
   total: number
   limit: number
+  context?: ContextUsage
 }
 
 export type DirListing = {

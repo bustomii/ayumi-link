@@ -35,6 +35,8 @@ type Props = {
   onSelect: (id: string) => void
   onRefresh: () => void
   onNewSession: () => void
+  /** Session baru langsung di folder kerja grup yang dipilih. */
+  onNewSessionInFolder: (cwd: string) => void
   onMoveRequest: (s: Session) => void
   onDeleteRequest: (s: Session) => void
   onRenameSession: (s: Session) => void
@@ -90,6 +92,7 @@ export function SessionSidebar({
   onSelect,
   onRefresh,
   onNewSession,
+  onNewSessionInFolder,
   onMoveRequest,
   onDeleteRequest,
   onRenameSession,
@@ -194,6 +197,19 @@ export function SessionSidebar({
             <Pencil className="h-4 w-4 text-sky-400" />
             Ubah nama folder
           </button>
+          {group.sessions[0]?.cwd && !group.sessions[0].cwdMissing && (
+            <button
+              type="button"
+              className={menuItem}
+              onClick={() => {
+                closeMenu()
+                onNewSessionInFolder(group.sessions[0].cwd)
+              }}
+            >
+              <Plus className="h-4 w-4 text-emerald-400" />
+              Session baru di folder ini
+            </button>
+          )}
         </PopoverMenu>
       )
     }
@@ -328,7 +344,7 @@ export function SessionSidebar({
                         onClick={() => toggleGroup(group.key)}
                         title={group.path || group.label}
                         className={cn(
-                          'flex w-full cursor-pointer items-center gap-2 rounded-lg border py-2 pl-2.5 pr-9 text-left transition-colors',
+                          'flex w-full cursor-pointer items-center gap-2 rounded-lg border py-2 pl-2.5 pr-16 text-left transition-colors',
                           hasActive
                             ? 'border-accent/30 bg-accent/10'
                             : 'border-border/60 bg-muted/40 hover:bg-muted/70',
@@ -358,6 +374,17 @@ export function SessionSidebar({
                           />
                         )}
                       </button>
+                      {group.sessions[0]?.cwd && !group.sessions[0].cwdMissing && (
+                        <button
+                          type="button"
+                          aria-label={`Session baru di ${group.label}`}
+                          title="Session baru di folder ini"
+                          onClick={() => onNewSessionInFolder(group.sessions[0].cwd)}
+                          className="absolute right-8 top-1/2 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
+                        >
+                          <Plus className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         aria-label="Aksi folder"

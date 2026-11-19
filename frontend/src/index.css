@@ -62,44 +62,45 @@ body {
   overflow: hidden;
 }
 
-/* iOS PWA: shell menempel ke seluruh layar fisik (termasuk area notch & home indicator).
-   100% pada html fixed di iOS standalone kadang lebih pendek dari layar (celah kosong di bawah,
-   konten terdorong ke atas), jadi tinggi dipaksa ke 100lvh dengan fallback bertingkat. */
-html.ios-pwa,
-html.ios-pwa body,
-html.ios-pwa #root {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100vh;
-  height: -webkit-fill-available;
-  height: 100lvh;
-  max-height: none;
-  overflow: hidden;
+/* Konfigurasi manual HANYA untuk PWA iOS (class .ios-pwa), berlaku untuk seluruh halaman
+   (chat, profil, sidebar): atas safe-area + 1.5rem, bawah -mb-5 (shell diperpanjang 1.25rem). */
+html.ios-pwa {
+  --ios-pwa-pt: calc(var(--safe-t) + 1.5rem); /* di bawah status bar + jarak */
+  --ios-pwa-mb: -1.25rem; /* -mb-5 */
 }
 
 html.ios-pwa .app-shell {
-  position: fixed;
-  inset: 0;
-  top: 0;
-  width: 100%;
-  height: 100vh;
-  height: -webkit-fill-available;
-  height: 100lvh;
-  max-height: none;
-  /* home indicator tipis: separuh safe-area cukup, tanpa celah kosong besar di bawah */
-  padding-bottom: calc(var(--safe-b) * 0.5);
+  padding-top: var(--ios-pwa-pt);
+  height: calc(var(--app-height) - var(--ios-pwa-mb));
+  max-height: calc(var(--app-height) - var(--ios-pwa-mb));
 }
 
-/* Sidebar overlay mobile di iOS PWA: full height viewport */
-@media (max-width: 767px) {
-  html.ios-pwa aside.fixed {
-    top: 0 !important;
-    height: 100lvh !important;
-    max-height: none !important;
+/* Keyboard terbuka: shell persis setinggi area di atas keyboard (tanpa perpanjangan bawah),
+   supaya kolom input tidak tertutup / melayang. */
+html.ios-pwa.kb-open .app-shell {
+  padding-top: var(--safe-t);
+  height: var(--app-height);
+  max-height: var(--app-height);
+}
+
+html.ios-pwa aside.fixed {
+  padding-top: var(--ios-pwa-pt);
+}
+
+/* iOS: input dengan font < 16px membuat Safari memperbesar halaman saat fokus (layout jadi terpotong).
+   Paksa 16px di perangkat sentuh iOS. */
+@supports (-webkit-touch-callout: none) {
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
   }
 }
 
+html {
+  -webkit-text-size-adjust: 100%;
+  touch-action: manipulation;
+}
 
 .chat-md {
   line-height: 1.55;

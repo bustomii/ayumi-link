@@ -124,6 +124,7 @@ func New(d Deps) *fiber.App {
 	p.Post("/browser/input", s.webInput)
 	p.Post("/browser/close", s.webClose)
 	p.Put("/sessions/:id/group", s.moveSession)
+	p.Post("/sessions/:id/fork", s.forkSession)
 	p.Put("/sessions/:id/title", s.renameSession)
 	p.Put("/groups/rename", s.renameGroup)
 	p.Delete("/sessions/:id", s.deleteSession)

@@ -12,6 +12,9 @@
 #    machine automatically (Docker Desktop, OrbStack, Colima, Rancher Desktop, Linux, rootless).
 #  - Docker Desktop (macOS/Windows): works as is. Linux: set DOCKER_GID in .env to the group of
 #    the socket:   stat -c %g /var/run/docker.sock
+#  - To redeploy FROM the Terminal tab / a chat inside the container use `make redeploy` (or
+#    `sh scripts/redeploy.sh`), never a bare `docker compose up`: that replaces the container that is
+#    running it and reads the container's own environment instead of .env.
 #  - Paths in a compose file are resolved by the HOST daemon, so a bind mount like ./data inside
 #    /workspace/app points at a folder that does not exist on the host. Use named volumes, or
 #    mount your projects at the same absolute path as on the host.

@@ -1,35 +1,53 @@
-# Convenience targets. Everything is also available as plain docker compose / go / npm commands.
+# Native (make build / make dev) atau Docker (make up).
 .DEFAULT_GOAL := help
 COMPOSE ?= docker compose
 
-.PHONY: help up up-docker down restart logs token claude-login reset-auth shell ps test dev build
+.PHONY: help build dev up up-docker redeploy down restart logs token claude-login reset-auth shell ps test docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
 
-up: ## Build and start everything (creates .env from .env.example on first run)
+# ---- Native (tanpa Docker) ----
+
+build: ## Native: build FE+BE and serve on http://localhost:8081
+	@chmod +x scripts/native-build.sh
+	@sh scripts/native-build.sh
+
+dev: ## Native: API :8081 + Vite HMR :5173 (satu perintah)
+	@chmod +x scripts/native-dev.sh
+	@sh scripts/native-dev.sh
+
+# ---- Docker ----
+
+up: ## Docker: build and start (http://localhost:8081)
 	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
 	$(COMPOSE) up -d --build
 	@echo ""
 	@echo "Ayumi Link is starting. Open http://localhost:8081 (or your AYUMI_PORT)."
 	@echo "First run? Get the setup token with:  make token"
 
-up-docker: ## Build and start with host Docker access (detects the Docker socket of this machine)
+up-docker: ## Docker + host Docker socket (Terminal tab: docker ps)
 	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
 	@sh scripts/detect-docker.sh
 	$(COMPOSE) -f docker-compose.yml -f docker-compose.host-docker.yml up -d --build
 	@echo "Host Docker is available in the Terminal tab:  docker ps"
 
+docker-build: ## Docker: build image only
+	$(COMPOSE) build
+
+redeploy: ## Rebuild + restart safely (Mac terminal or inside the app container)
+	@sh scripts/redeploy.sh
+
 down: ## Stop and remove the containers (data volumes are kept)
 	$(COMPOSE) down
 
-restart: ## Restart the app
+restart: ## Restart the app container
 	$(COMPOSE) restart ayumi-link
 
-logs: ## Follow the logs
+logs: ## Follow the container logs
 	$(COMPOSE) logs -f --tail=100 ayumi-link
 
-token: ## Print the first-run setup token
+token: ## Print the first-run setup token (Docker logs)
 	@$(COMPOSE) logs ayumi-link 2>&1 | grep -A1 "SETUP DIPERLUKAN" | tail -2 || true
 	@echo "(no token shown = an account already exists)"
 
@@ -49,11 +67,3 @@ ps: ## Show container status and health
 test: ## Run backend tests and the frontend type check
 	cd backend && go vet ./... && go test ./...
 	cd frontend && npm ci && npx tsc -b
-
-dev: ## How to run backend and frontend locally for development
-	@echo "Terminal 1:  cd backend && go run ."
-	@echo "Terminal 2:  cd frontend && npm install && npm run dev"
-	@echo "Open http://localhost:5173"
-
-build: ## Build the Docker image only
-	$(COMPOSE) build

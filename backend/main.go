@@ -60,6 +60,7 @@ func main() {
 	}
 	browser := fsbrowse.New(cfg.Roots)
 	svc := &claude.Service{Home: cfg.ClaudeHome, DesktopDir: cfg.DesktopDir, Store: st}
+	svc.CwdOK = func(p string) bool { _, ok := browser.ResolveDir(p); return ok }
 	bin := claude.ResolveBin(cfg.ClaudeBin, cfg.DesktopDir)
 	up := uploads.New(filepath.Join(cfg.DataDir, "uploads"), uploads.Options{
 		MaxBytes: int64(cfg.MaxUploadMB) << 20,

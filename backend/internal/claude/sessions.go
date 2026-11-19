@@ -17,6 +17,8 @@ type Service struct {
 	Home       string // ~/.claude
 	DesktopDir string // folder data Claude Desktop
 	Store      *store.Store
+	// CwdOK memeriksa apakah folder kerja session masih bisa dipakai (ada + diizinkan). nil = cek ada saja.
+	CwdOK func(string) bool
 }
 
 var (
@@ -174,12 +176,21 @@ func (s *Service) listBase() ([]Session, map[string]string) {
 func (s *Service) List() []Session {
 	out, registry := s.listBase()
 	names := s.Store.State().GroupNames
+	usable := map[string]bool{}
 	for i := range out {
 		if renamed := names[out[i].Group]; renamed != "" {
 			out[i].Group = renamed
 		}
 		if _, ok := registry[out[i].ID]; ok {
 			out[i].Local = true
+		}
+		if c := out[i].Cwd; c != "" {
+			ok, seen := usable[c]
+			if !seen {
+				ok = s.cwdUsable(c)
+				usable[c] = ok
+			}
+			out[i].CwdMissing = !ok
 		}
 	}
 
@@ -226,11 +237,12 @@ func (s *Service) applyLocalState(in []Session) []Session {
 }
 
 type Detail struct {
-	Session  Session   `json:"session"`
-	Messages []Message `json:"messages"`
-	HasMore  bool      `json:"hasMore"`
-	Total    int       `json:"total"`
-	Limit    int       `json:"limit"`
+	Session  Session      `json:"session"`
+	Messages []Message    `json:"messages"`
+	HasMore  bool         `json:"hasMore"`
+	Total    int          `json:"total"`
+	Limit    int          `json:"limit"`
+	Context  *ContextInfo `json:"context,omitempty"`
 }
 
 // Detail mengembalikan pesan sebuah session dengan paginasi (terbaru dulu).
@@ -254,7 +266,7 @@ func (s *Service) Detail(id string, limit int, before string) (*Detail, error) {
 	if page == nil {
 		page = []Message{}
 	}
-	return &Detail{Session: meta, Messages: page, HasMore: hasMore, Total: len(msgs), Limit: limit}, nil
+	return &Detail{Session: meta, Messages: page, HasMore: hasMore, Total: len(msgs), Limit: limit, Context: ReadContextUsage(path)}, nil
 }
 
 // SetGroup memindahkan session ke folder (hanya berlaku di Ayumi Link). group kosong = reset.

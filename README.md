@@ -28,6 +28,7 @@ CLI on your own machine does the work.
 - **Attach files to a message** (button, drag-and-drop, or paste): images/photos, PDF, Excel (`.xlsx`, `.csv`) and Word (`.docx`) — Claude reads them. Every other file type is rejected.
 - **Per-message model / effort / tool-permission** menu (Fable, Opus, Sonnet, Haiku and older models).
 - **Rename, move, hide or delete** sessions and folders (local to Ayumi Link; never edits Claude's data).
+- **Fork to another folder:** if a session's folder was deleted, renamed or is not available (e.g. a Mac path inside Docker), pick a new folder and the session is copied (forked) there, like Claude Desktop; the original stays untouched.
 - **Browser tab:** a headless Chromium on the server (Docker image or your own Chrome/Chromium when
   run natively) streamed into the UI — open sites, click, type, scroll. Site logins persist (cookies +
   profile live in the data dir); it shuts itself down after `AYUMI_BROWSER_IDLE_MIN` idle minutes.
@@ -38,7 +39,7 @@ CLI on your own machine does the work.
 - **Access control from `.env`:** client **IP allowlist**, trusted-proxy support, cookie hardening.
 - **Deep links:** `/s/<session-id>` reopens a session after reload; skeleton loading states; clear
   error dialogs; responsive layout (phone drawer sidebar).
-- **One image, one command:** `docker compose up -d --build`.
+- **Run native or Docker:** `make build` / `make dev` on the host, or `make up` with Docker.
 
 ## How it works
 
@@ -54,52 +55,52 @@ CLI on your own machine does the work.
 Replies stream to the browser over Server-Sent Events. Ayumi Link stores only its own small state
 (account, 2FA, UI preferences) in its data directory.
 
-## Quick start — Docker (one command)
+## Quick start — native (macOS / Linux, no Docker)
 
-Requires Docker with Compose v2.24+.
+Best when you want **host Terminal**, Keychain login, and Claude Desktop session groups.
+Requirements: Go ≥ 1.24, Node ≥ 22, `make`, and the `claude` CLI installed and logged in.
 
 ```bash
 git clone https://github.com/bustomii/ayumi-link.git && cd ayumi-link
-docker compose up -d --build          # or: make up
+cp .env.example .env   # optional; created automatically on first make if missing
+
+make build             # build FE+BE and serve → http://localhost:8081
+# or
+make dev               # API :8081 + Vite HMR :5173 (one command, Ctrl+C stops both)
 ```
 
-The first build downloads the base images and the Claude Code CLI (roughly 1 GB), so it can take
-several minutes on a slow connection; later builds are cached.
+| Command | What it does |
+|---|---|
+| `make build` | Production-style: build frontend + Go binary, then serve everything on **:8081** |
+| `make dev` | Development: backend + Vite together (UI at :5173, API at :8081) |
+| `make help` | List all targets |
+
+1. Open the URL above and create your account (setup token is printed in the **terminal** where `make` runs).
+2. Claude CLI is already on the host — use your normal `claude` login, or paste a setup token in **Profile → Claude CLI**.
+3. Folder picker defaults to your home directory (`AYUMI_ROOTS`).
+
+## Quick start — Docker
+
+Requires Docker with Compose v2.24+. Terminal tab runs **inside the container** (not the Mac host shell).
+
+```bash
+git clone https://github.com/bustomii/ayumi-link.git && cd ayumi-link
+make up                # same as: docker compose up -d --build
+```
+
+The first build downloads the base images and the Claude Code CLI (roughly 1 GB); later builds are cached.
 
 1. Open <http://localhost:8081>.
-2. Create your account. The one-time **setup token** is printed in the logs:
-   `docker compose logs ayumi-link | grep -A1 SETUP` (or `make token`). Scan the QR with an
-   authenticator app and **store the recovery codes**.
-3. Log the Claude CLI in **inside the container** (credentials live in a Docker volume):
-   `docker compose exec -it ayumi-link claude auth login` (or `make claude-login`).
-   Alternatives: set `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY` in `.env`.
-4. Put the projects Claude may work in under `./workspace` (or set `WORKSPACE_DIR` in `.env`).
+2. Create your account. Setup token: `make token` (or Docker logs).
+3. Log Claude in via **Profile → Claude CLI** (paste `claude setup-token`), or `make claude-login`, or set `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` in `.env`.
+4. Put projects under `./workspace` (or set `WORKSPACE_DIR` / `AYUMI_ROOTS` in `.env`).
 
 By default the port is published on **127.0.0.1 only**. See [Remote access](#remote-access-phone) before
 changing that.
 
-> **Docker vs. running directly.** A Linux container cannot read your macOS Keychain, Claude Desktop's
-> folder groups, or host paths such as `/Users/you/...`. Docker is ideal for a server/NAS/VPS and for
-> trying the app. To mirror an **existing desktop setup** (all your current sessions and Claude Desktop
-> groups) run it directly on that machine.
-
-## Quick start — run directly (macOS / Linux)
-
-Requirements: Go ≥ 1.24, Node ≥ 22, and the `claude` CLI installed and logged in.
-
-```bash
-cp .env.example .env                       # optional; the backend also finds it from backend/ (../.env)
-# development (two terminals)
-cd backend  && go run .
-cd frontend && npm install && npm run dev  # http://localhost:5173
-
-# or a single production process
-cd frontend && npm install && npm run build
-cd ../backend && AYUMI_STATIC_DIR=../frontend/dist go run .   # http://localhost:8081
-```
-
-Direct runs use your home directory as the folder-picker root by default and prefer the newest
-`claude` bundled with Claude Desktop (so new models work), falling back to `claude` in `PATH`.
+> **Docker vs native.** A Linux container cannot use macOS Keychain or host paths like `/Users/you/...`
+> unless you mount them. Prefer **`make build` / `make dev`** on the Mac for your existing Desktop
+> sessions; use Docker for a server/NAS/VPS.
 
 ## Configuration
 

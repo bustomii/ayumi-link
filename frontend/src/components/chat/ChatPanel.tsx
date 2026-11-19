@@ -1,10 +1,11 @@
-import { FileDiff, Globe, Menu, MessageSquare, Paperclip, Plus, Terminal } from 'lucide-react'
+import { AlertTriangle, ArrowDown, FileDiff, Globe, Menu, FolderInput, MessageSquare, Paperclip, Plus, Terminal } from 'lucide-react'
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
 import type { Message, Session } from '@/api/sessions'
-import type { Attachment } from '@/api/types'
+import type { Attachment, ContextUsage } from '@/api/types'
 import { ChatBubble } from '@/components/chat/ChatBubble'
 import { ChatComposer } from '@/components/chat/ChatComposer'
 import { ChatHeaderSkeleton, ChatSkeleton } from '@/components/chat/ChatSkeleton'
+import { ContextMeter } from '@/components/chat/ContextMeter'
 import { BrowserPanel } from '@/components/session/BrowserPanel'
 import { ChangesPanel } from '@/components/session/ChangesPanel'
 import { TerminalPanel } from '@/components/session/TerminalPanel'
@@ -25,9 +26,13 @@ type Props = {
   loading: boolean
   loadingOlder?: boolean
   hasMore?: boolean
+  /** Pemakaian jendela konteks giliran terakhir (seperti Claude Desktop). */
+  context?: ContextUsage | null
   error: string | null
   onOpenSidebar?: () => void
   onNewSession?: () => void
+  /** Folder kerja session hilang: minta pengguna memilih folder baru (fork). */
+  onForkRequest?: () => void
   onLoadOlder?: () => void
   sending?: boolean
   onSend?: (text: string, attachments: Attachment[]) => void
@@ -42,9 +47,11 @@ export function ChatPanel({
   loading,
   loadingOlder = false,
   hasMore = false,
+  context = null,
   error,
   onOpenSidebar,
   onNewSession,
+  onForkRequest,
   onLoadOlder,
   sending = false,
   onSend,
@@ -58,6 +65,7 @@ export function ChatPanel({
   const prevScrollHeightRef = useRef(0)
   const prevMsgCountRef = useRef(0)
   const loadingOlderRef = useRef(false)
+  const [showJump, setShowJump] = useState(false)
 
   // ---- lampiran ----
   const limits = useUploadLimits()
@@ -122,6 +130,7 @@ export function ChatPanel({
     const el = scrollRef.current
     if (!el) return
     el.scrollTop = el.scrollHeight
+    setShowJump(false)
   }, [session?.id])
 
   useLayoutEffect(() => {
@@ -143,11 +152,19 @@ export function ChatPanel({
     prevScrollHeightRef.current = el.scrollHeight
   }, [messages, loading])
 
+  function jumpToLatest() {
+    const el = scrollRef.current
+    if (!el) return
+    stickBottomRef.current = true
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }
+
   function onScroll() {
     const el = scrollRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
     stickBottomRef.current = distanceFromBottom < 80
+    setShowJump(distanceFromBottom > 240)
 
     if (el.scrollTop < 80 && hasMore && !loadingOlder && !loading) {
       prevScrollHeightRef.current = el.scrollHeight
@@ -227,6 +244,7 @@ export function ChatPanel({
                 )}
               </div>
               <p className="truncate text-[11px] text-muted-foreground sm:text-xs">{session.cwd}</p>
+              {context && <ContextMeter usage={context} />}
             </div>
           ) : (
             <ChatHeaderSkeleton />
@@ -263,6 +281,23 @@ export function ChatPanel({
         )}
       </header>
 
+      {session?.cwdMissing && canTools && (
+        <div role="alert" className="flex shrink-0 items-start gap-2.5 border-b border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-xs">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-amber-300">Folder session ini tidak tersedia</p>
+            <p className="mt-0.5 break-all text-muted-foreground">{session.cwd}</p>
+            <p className="mt-0.5 text-muted-foreground">Folder dihapus, dipindah, atau di luar folder yang diizinkan. Pilih folder lain: session akan di-fork ke sana.</p>
+          </div>
+          {onForkRequest && (
+            <Button type="button" size="sm" onClick={onForkRequest} className="shrink-0 gap-1">
+              <FolderInput className="h-3.5 w-3.5" />
+              Pilih folder
+            </Button>
+          )}
+        </div>
+      )}
+
       {tab === 'changes' && canTools ? (
         <ChangesPanel sessionId={session!.id} />
       ) : tab === 'browser' && canTools ? (
@@ -271,6 +306,7 @@ export function ChatPanel({
         <TerminalPanel sessionId={session!.id} />
       ) : (
         <>
+          <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <ScrollArea
             ref={scrollRef}
             onScroll={onScroll}
@@ -313,16 +349,33 @@ export function ChatPanel({
               <div ref={bottomRef} />
             </div>
           </ScrollArea>
+          {showJump && messages.length > 0 && (
+            <button
+              type="button"
+              onClick={jumpToLatest}
+              aria-label="Ke pesan terbaru"
+              title="Ke pesan terbaru"
+              className="absolute bottom-3 right-3 z-10 flex h-9 w-9 items-center justify-center rounded-full border border-border/70 bg-card/90 text-foreground shadow-lg backdrop-blur transition-colors hover:bg-accent sm:right-5"
+            >
+              <ArrowDown className="h-4 w-4" />
+            </button>
+          )}
+          </div>
 
           <div className="shrink-0 border-t border-border/70 bg-background/60 px-3 py-2.5 backdrop-blur sm:px-5 sm:py-3">
             <ChatComposer
               sending={sending}
+              cwd={session?.cwdMissing ? undefined : session?.cwd}
               disabled={!session}
               prefs={prefs}
               onPrefs={onPrefs}
               attach={attach}
               accept={acceptAttr(limits)}
               onSend={(t) => {
+                if (session?.cwdMissing && onForkRequest) {
+                  onForkRequest()
+                  return
+                }
                 onSend?.(t, attach.attachments)
                 attach.clear()
               }}

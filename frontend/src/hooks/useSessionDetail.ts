@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchSessionDetail } from '@/api/sessions'
 import { useLatest } from '@/hooks/useLatest'
-import type { Message, Session, SessionDetail } from '@/api/types'
+import type { ContextUsage, Message, Session, SessionDetail } from '@/api/types'
 
 export const PAGE_SIZE = 20
 
@@ -11,6 +11,7 @@ export function useSessionDetail(activeId: string | null, findSession: (id: stri
   const [messages, setMessages] = useState<Message[]>([])
   const [hasMore, setHasMore] = useState(false)
   const [total, setTotal] = useState(0)
+  const [context, setContext] = useState<ContextUsage | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,6 +25,7 @@ export function useSessionDetail(activeId: string | null, findSession: (id: stri
     setMessages(data.messages ?? [])
     setHasMore(Boolean(data.hasMore))
     setTotal(data.total ?? data.messages?.length ?? 0)
+    setContext(data.context ?? null)
     setError(null)
   }, [])
 
@@ -32,6 +34,7 @@ export function useSessionDetail(activeId: string | null, findSession: (id: stri
     setMessages([])
     setHasMore(false)
     setTotal(0)
+    setContext(null)
     setError(null)
   }, [])
 
@@ -94,5 +97,5 @@ export function useSessionDetail(activeId: string | null, findSession: (id: stri
     }
   }, [activeId, hasMore, loading, loadingOlder, messages])
 
-  return { session, messages, hasMore, total, loading, loadingOlder, error, loadOlder, adopt, clear }
+  return { session, messages, hasMore, total, context, loading, loadingOlder, error, loadOlder, adopt, clear }
 }

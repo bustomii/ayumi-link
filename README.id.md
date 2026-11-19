@@ -33,7 +33,7 @@ mesin Anda yang bekerja.
 - **Kontrol akses lewat `.env`:** **allowlist IP** klien, dukungan proxy tepercaya, pengerasan cookie.
 - **Tautan langsung:** `/s/<id-session>` membuka session yang sama setelah reload; skeleton loading;
   popup error yang jelas; tampilan responsif.
-- **Satu image, satu perintah:** `docker compose up -d --build`.
+- **Native atau Docker:** `make build` / `make dev` di host, atau `make up` dengan Docker.
 
 ## Cara kerja
 
@@ -46,49 +46,52 @@ mesin Anda yang bekerja.
                     ~/.claude  (session berupa transkrip JSONL, dibaca langsung)
 ```
 
-## Mulai cepat — Docker (satu perintah)
+## Mulai cepat — native (macOS / Linux, tanpa Docker)
 
-Butuh Docker dengan Compose v2.24+.
+Paling cocok jika Anda ingin **Terminal host**, login Keychain, dan grup session Claude Desktop.
+Syarat: Go ≥ 1.24, Node ≥ 22, `make`, dan CLI `claude` yang sudah terpasang dan login.
 
 ```bash
 git clone https://github.com/bustomii/ayumi-link.git && cd ayumi-link
-docker compose up -d --build          # atau: make up
+cp .env.example .env   # opsional; dibuat otomatis saat make pertama jika belum ada
+
+make build             # build FE+BE lalu serve → http://localhost:8081
+# atau
+make dev               # API :8081 + Vite HMR :5173 (satu perintah, Ctrl+C menghentikan keduanya)
 ```
 
-Build pertama mengunduh image dasar dan CLI Claude Code (sekitar 1 GB), jadi bisa memakan beberapa
-menit di koneksi lambat; build berikutnya memakai cache.
+| Perintah | Fungsi |
+|---|---|
+| `make build` | Mirip produksi: build frontend + biner Go, lalu sajikan semua di **:8081** |
+| `make dev` | Pengembangan: backend + Vite sekaligus (UI :5173, API :8081) |
+| `make help` | Daftar semua target |
+
+1. Buka URL di atas dan buat akun (token setup muncul di **terminal** tempat `make` dijalankan).
+2. CLI Claude sudah di host — pakai login `claude` biasa, atau tempel token di **Profil → Claude CLI**.
+3. Pemilih folder default ke home (`AYUMI_ROOTS`).
+
+## Mulai cepat — Docker
+
+Butuh Docker dengan Compose v2.24+. Tab Terminal berjalan **di dalam container** (bukan shell Mac host).
+
+```bash
+git clone https://github.com/bustomii/ayumi-link.git && cd ayumi-link
+make up                # sama dengan: docker compose up -d --build
+```
+
+Build pertama mengunduh image dasar dan CLI Claude Code (sekitar 1 GB); build berikutnya memakai cache.
 
 1. Buka <http://localhost:8081>.
-2. Buat akun. **Token setup** sekali pakai dicetak di log:
-   `docker compose logs ayumi-link | grep -A1 SETUP` (atau `make token`). Pindai QR dengan aplikasi
-   autentikator dan **simpan kode pemulihan**.
-3. Login CLI Claude **di dalam container** (kredensial disimpan di volume Docker):
-   `docker compose exec -it ayumi-link claude auth login` (atau `make claude-login`).
-   Alternatif: isi `CLAUDE_CODE_OAUTH_TOKEN` (dari `claude setup-token`) atau `ANTHROPIC_API_KEY` di `.env`.
-4. Taruh proyek yang boleh dikerjakan Claude di `./workspace` (atau atur `WORKSPACE_DIR` di `.env`).
+2. Buat akun. Token setup: `make token` (atau log Docker).
+3. Login Claude lewat **Profil → Claude CLI** (tempel `claude setup-token`), atau `make claude-login`, atau isi `CLAUDE_CODE_OAUTH_TOKEN` / `ANTHROPIC_API_KEY` di `.env`.
+4. Taruh proyek di `./workspace` (atau atur `WORKSPACE_DIR` / `AYUMI_ROOTS` di `.env`).
 
 Secara bawaan port hanya dipublikasikan di **127.0.0.1**. Baca [Akses jarak jauh](#akses-jarak-jauh-hp)
 sebelum mengubahnya.
 
-> **Docker vs. dijalankan langsung.** Container Linux tidak bisa membaca Keychain macOS, grup folder
-> Claude Desktop, atau path host seperti `/Users/anda/...`. Docker cocok untuk server/NAS/VPS dan untuk
-> mencoba. Untuk meniru **setup desktop yang sudah ada** (semua session dan grup Claude Desktop),
-> jalankan langsung di mesin tersebut.
-
-## Mulai cepat — jalankan langsung (macOS / Linux)
-
-Syarat: Go ≥ 1.24, Node ≥ 22, dan CLI `claude` yang sudah terpasang dan login.
-
-```bash
-cp .env.example .env                       # opsional
-# pengembangan (dua terminal)
-cd backend  && go run .
-cd frontend && npm install && npm run dev  # http://localhost:5173
-
-# atau satu proses produksi
-cd frontend && npm install && npm run build
-cd ../backend && AYUMI_STATIC_DIR=../frontend/dist go run .   # http://localhost:8081
-```
+> **Docker vs native.** Container Linux tidak memakai Keychain macOS atau path `/Users/anda/...`
+> kecuali di-mount. Di Mac, prefer **`make build` / `make dev`** agar session Desktop ikut;
+> Docker cocok untuk server/NAS/VPS.
 
 ## Konfigurasi
 

@@ -7,12 +7,22 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { describeError, type AppError } from '@/lib/errors'
 
 type Props = {
+  title?: string
+  description?: string
+  confirmLabel?: string
   recentCwds: string[]
   onCancel: () => void
   onCreate: (cwd: string) => void
 }
 
-export function NewSessionDialog({ recentCwds, onCancel, onCreate }: Props) {
+export function NewSessionDialog({
+  title = 'Session baru',
+  description = 'Pilih folder kerja tempat Claude dijalankan di Mac.',
+  confirmLabel = 'Pilih folder ini',
+  recentCwds,
+  onCancel,
+  onCreate,
+}: Props) {
   const [listing, setListing] = useState<DirListing | null>(null)
   const [error, setError] = useState<AppError | null>(null)
   const [loading, setLoading] = useState(true)
@@ -38,12 +48,10 @@ export function NewSessionDialog({ recentCwds, onCancel, onCreate }: Props) {
   const shown = listing ? (root && listing.path.startsWith(root) ? '~' + listing.path.slice(root.length) : listing.path) : ''
 
   return (
-    <Modal label="Session baru" onClose={onCancel} className="flex max-h-[85vh] flex-col">
+    <Modal label={title} onClose={onCancel} className="flex max-h-[85vh] flex-col">
       <>
-        <p className="text-base font-semibold">Session baru</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Pilih folder kerja tempat Claude dijalankan di Mac.
-        </p>
+        <p className="text-base font-semibold">{title}</p>
+        <p className="mt-1 text-xs text-muted-foreground">{description}</p>
 
         {recents.length > 0 && (
           <div className="mt-3">
@@ -127,7 +135,7 @@ export function NewSessionDialog({ recentCwds, onCancel, onCreate }: Props) {
           </Button>
           <Button type="button" disabled={!listing || loading} onClick={() => listing && onCreate(listing.path)}>
             <FolderOpen className="mr-1.5 h-4 w-4" />
-            Pilih folder ini
+            {confirmLabel}
           </Button>
         </div>
       </>
