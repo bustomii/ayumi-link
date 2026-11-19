@@ -1,129 +1,192 @@
-import { Loader2, Play, Terminal } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
-import { enterTerminal, runTerminal } from '@/api/sessions'
-import type { TermResult } from '@/api/types'
-import { Button } from '@/components/ui/button'
-import { ScrollArea } from '@/components/ui/scroll-area'
+import { FitAddon } from '@xterm/addon-fit'
+import { Terminal as XTerm } from '@xterm/xterm'
+import '@xterm/xterm/css/xterm.css'
+import { Loader2, Terminal } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  createTerminalTab,
+  deleteTerminalTab,
+  fetchToolsTabs,
+  terminalWsUrl,
+  type ToolTab,
+} from '@/api/toolsTabs'
+import { ToolTabBar } from '@/components/session/ToolTabBar'
 
-type Props = { sessionId?: string }
+type Props = { sessionId: string }
 
+/** Terminal PTY penuh (xterm) + multi-tab per chat. */
 export function TerminalPanel({ sessionId }: Props) {
-  const [cwd, setCwd] = useState('')
-  const [lines, setLines] = useState<TermResult[]>([])
-  const [cmd, setCmd] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [running, setRunning] = useState(false)
+  const [tabs, setTabs] = useState<ToolTab[]>([])
+  const [activeId, setActiveId] = useState('')
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    void enterTerminal(sessionId || undefined)
-      .then((d) => {
-        if (!cancelled) setCwd(d.cwd ?? '')
-      })
-      .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Gagal membuka terminal')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
+  const hostRef = useRef<HTMLDivElement>(null)
+  const xtermRef = useRef<XTerm | null>(null)
+  const fitRef = useRef<FitAddon | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
+  const activeRef = useRef(activeId)
+  activeRef.current = activeId
+
+  const reloadTabs = useCallback(async () => {
+    const data = await fetchToolsTabs(sessionId)
+    setTabs(data.terminal)
+    return data.terminal
   }, [sessionId])
 
+  // Muat / buat tab awal.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: 'end' })
-  }, [lines, running])
+    let off = false
+    setLoading(true)
+    setError(null)
+    ;(async () => {
+      try {
+        let list = await reloadTabs()
+        if (off) return
+        if (list.length === 0) {
+          const t = await createTerminalTab(sessionId)
+          if (off) return
+          list = await reloadTabs()
+          setActiveId(t.id)
+        } else {
+          const active = list.find((t) => t.active) ?? list[0]
+          setActiveId(active.id)
+        }
+      } catch (e) {
+        if (!off) setError(e instanceof Error ? e.message : 'Gagal memuat terminal')
+      } finally {
+        if (!off) setLoading(false)
+      }
+    })()
+    return () => {
+      off = true
+    }
+  }, [sessionId, reloadTabs])
 
-  const run = async () => {
-    const command = cmd.trim()
-    if (!command || running) return
-    setRunning(true)
+  // xterm + websocket per tab aktif.
+  useEffect(() => {
+    if (!activeId || !hostRef.current) return
+    const host = hostRef.current
+    host.innerHTML = ''
+
+    const term = new XTerm({
+      cursorBlink: true,
+      fontSize: 12,
+      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+      theme: { background: '#0a0b0e', foreground: '#e8e9ed', cursor: '#3d8bfd' },
+      scrollback: 5000,
+    })
+    const fit = new FitAddon()
+    term.loadAddon(fit)
+    term.open(host)
+    fit.fit()
+    xtermRef.current = term
+    fitRef.current = fit
+
+    const ws = new WebSocket(terminalWsUrl(sessionId, activeId))
+    ws.binaryType = 'arraybuffer'
+    wsRef.current = ws
+
+    ws.onopen = () => {
+      const dims = { cols: term.cols, rows: term.rows }
+      ws.send(JSON.stringify({ type: 'resize', cols: dims.cols, rows: dims.rows }))
+    }
+    ws.onmessage = (ev) => {
+      if (typeof ev.data === 'string') {
+        term.write(ev.data)
+        return
+      }
+      term.write(new Uint8Array(ev.data as ArrayBuffer))
+    }
+    ws.onerror = () => setError('Koneksi terminal terputus')
+    ws.onclose = () => {
+      /* reconnect via tab switch / remount */
+    }
+
+    const sub = term.onData((data) => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data }))
+      }
+    })
+
+    const onResize = () => {
+      fit.fit()
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+      }
+    }
+    const ro = new ResizeObserver(onResize)
+    ro.observe(host)
+    window.addEventListener('resize', onResize)
+
+    return () => {
+      sub.dispose()
+      ro.disconnect()
+      window.removeEventListener('resize', onResize)
+      ws.close()
+      term.dispose()
+      xtermRef.current = null
+      fitRef.current = null
+      wsRef.current = null
+    }
+  }, [sessionId, activeId])
+
+  const onNew = async () => {
+    setBusy(true)
     setError(null)
     try {
-      const result = await runTerminal(command)
-      setLines((r) => [...r, result])
-      setCwd(result.cwd)
-      setCmd('')
-      inputRef.current?.focus()
+      const t = await createTerminalTab(sessionId, `Terminal ${tabs.length + 1}`)
+      await reloadTabs()
+      setActiveId(t.id)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Gagal menjalankan perintah')
+      setError(e instanceof Error ? e.message : 'Gagal buat tab')
     } finally {
-      setRunning(false)
+      setBusy(false)
     }
   }
+
+  const onClose = async (id: string) => {
+    setBusy(true)
+    try {
+      await deleteTerminalTab(sessionId, id)
+      const list = await reloadTabs()
+      if (activeId === id) {
+        setActiveId(list[0]?.id ?? '')
+      }
+      if (list.length === 0) {
+        const t = await createTerminalTab(sessionId)
+        await reloadTabs()
+        setActiveId(t.id)
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal tutup tab')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const cwd = tabs.find((t) => t.id === activeId)?.cwd
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e]">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2">
         <Terminal className="h-4 w-4 text-emerald-400" />
         <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground" title={cwd}>
-          {loading ? '…' : cwd || 'cwd'}
+          {loading ? '…' : cwd || 'terminal'}
         </p>
+        {busy && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       </div>
-
-      <ScrollArea className="min-h-0 flex-1 overflow-y-auto p-3 font-mono text-[11px] leading-relaxed sm:text-xs">
-        {lines.length === 0 && !loading && (
-          <p className="text-muted-foreground">
-            Shell interaktif (satu sesi). Bisa <code className="text-foreground">cd</code> seperti terminal biasa.
-            Folder awal = folder chat ini, atau root <code className="text-foreground">AYUMI_ROOTS</code>.
-          </p>
-        )}
-        {lines.map((r, i) => (
-          <div key={i} className="mb-3 border-b border-white/5 pb-3">
-            <p className="text-sky-300">
-              <span className="text-muted-foreground">$ </span>
-              {r.command}
-            </p>
-            {r.stdout && (
-              <pre className="mt-1 whitespace-pre-wrap break-words text-foreground/85">{r.stdout}</pre>
-            )}
-            {r.stderr && (
-              <pre className="mt-1 whitespace-pre-wrap break-words text-red-300">{r.stderr}</pre>
-            )}
-            <p className="mt-1 text-[10px] text-muted-foreground">
-              exit {r.exitCode}
-              {r.timedOut ? ' · timeout' : ''}
-              {r.truncated ? ' · output dipotong' : ''}
-              {' · '}
-              {r.cwd}
-            </p>
-          </div>
-        ))}
-        <div ref={bottomRef} />
-      </ScrollArea>
-
+      <ToolTabBar
+        tabs={tabs}
+        activeId={activeId}
+        onSelect={setActiveId}
+        onClose={(id) => void onClose(id)}
+        onNew={() => void onNew()}
+        busy={busy || loading}
+      />
       {error && <p className="shrink-0 px-3 py-1.5 text-xs text-red-400">{error}</p>}
-
-      <form
-        className="flex shrink-0 items-center gap-2 border-t border-border/70 bg-background/40 px-3 py-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void run()
-        }}
-      >
-        <span className="font-mono text-sm text-emerald-400">$</span>
-        <input
-          ref={inputRef}
-          value={cmd}
-          onChange={(e) => setCmd(e.target.value)}
-          disabled={running || loading}
-          placeholder="cd folder && ls  (timeout 30s)"
-          className="min-w-0 flex-1 rounded-lg border border-border bg-card/70 px-3 py-2 font-mono text-sm outline-none focus:border-primary disabled:opacity-60"
-          autoCapitalize="off"
-          autoCorrect="off"
-          spellCheck={false}
-        />
-        <Button type="submit" size="sm" disabled={running || loading || !cmd.trim()} className="gap-1">
-          {running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-          Run
-        </Button>
-      </form>
+      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden p-2" />
     </div>
   )
 }

@@ -62,9 +62,11 @@ func (s *Server) webOpen(c *fiber.Ctx) error {
 		return err
 	}
 	var b struct {
-		URL    string `json:"url"`
-		Width  int    `json:"width"`
-		Height int    `json:"height"`
+		URL       string `json:"url"`
+		Width     int    `json:"width"`
+		Height    int    `json:"height"`
+		SessionID string `json:"sessionId"`
+		TabID     string `json:"tabId"`
 	}
 	if err := c.BodyParser(&b); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "json tidak valid")
@@ -75,6 +77,24 @@ func (s *Server) webOpen(c *fiber.Ctx) error {
 		if target, err = normalizeWebURL(b.URL); err != nil {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
+	}
+	sid := strings.TrimSpace(b.SessionID)
+	if sid != "" {
+		if b.TabID != "" {
+			if _, err := s.Web.ActivateTab(c.UserContext(), sid, b.TabID); err != nil {
+				return s.webErr(err)
+			}
+			info, err := s.Web.Open(c.UserContext(), target, b.Width, b.Height)
+			if err != nil {
+				return s.webErr(err)
+			}
+			return c.JSON(fiber.Map{"available": true, "running": info.Running, "url": info.URL, "title": info.Title, "tabId": b.TabID})
+		}
+		tab, err := s.Web.OpenForChat(c.UserContext(), sid, target, b.Width, b.Height)
+		if err != nil {
+			return s.webErr(err)
+		}
+		return c.JSON(fiber.Map{"available": true, "running": true, "url": tab.URL, "title": tab.Title, "tabId": tab.ID})
 	}
 	info, err := s.Web.Open(c.UserContext(), target, b.Width, b.Height)
 	if err != nil {

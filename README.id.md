@@ -28,6 +28,8 @@ mesin Anda yang bekerja.
 - **Lampirkan file ke pesan** (tombol, seret-dan-lepas, atau tempel): gambar/foto, PDF, Excel (`.xlsx`, `.csv`) dan Word (`.docx`); Claude membacanya. Jenis file lain ditolak.
 - **Menu model / effort / izin tool** per pesan (Fable, Opus, Sonnet, Haiku, dan model lama).
 - **Ubah nama, pindah, sembunyikan, atau hapus** session dan folder (lokal di Ayumi Link; tidak mengubah data Claude).
+- **Terminal penuh (PTY):** xterm.js + WebSocket, multi-tab per chat (maks 5). Shell host saat native; shell container di Docker. Idle ~10 menit / grace reconnect ~2 menit; metadata di `tools-tabs.json`.
+- **Browser multi-tab per chat:** Chrome/Chromium/Edge host lewat CDP (native disarankan) dengan profil khusus `browser-profile/` di data dir. Cookie/login tersimpan; proses mati setelah `AYUMI_BROWSER_IDLE_MIN`. Docker opsional `WITH_BROWSER`.
 - **Autentikasi sungguhan:** password argon2id, 2FA TOTP, kode pemulihan sekali pakai, penguncian akun,
   daftar perangkat dengan sign-out jarak jauh, verifikasi ulang untuk aksi sensitif.
 - **Kontrol akses lewat `.env`:** **allowlist IP** klien, dukungan proxy tepercaya, pengerasan cookie.
@@ -56,6 +58,8 @@ git clone https://github.com/bustomii/ayumi-link.git && cd ayumi-link
 cp .env.example .env   # opsional; dibuat otomatis saat make pertama jika belum ada
 
 make build             # build FE+BE lalu serve → http://localhost:8081
+make service-install   # LaunchAgent macOS; tiap start/restart = make build
+make service-restart   # redeploy native (build lagi)
 # atau
 make dev               # API :8081 + Vite HMR :5173 (satu perintah, Ctrl+C menghentikan keduanya)
 ```
@@ -63,6 +67,8 @@ make dev               # API :8081 + Vite HMR :5173 (satu perintah, Ctrl+C mengh
 | Perintah | Fungsi |
 |---|---|
 | `make build` | Mirip produksi: build frontend + biner Go, lalu sajikan semua di **:8081** |
+| `make service-install` / `service-restart` | LaunchAgent `com.ayumi.link`; restart = **`make build` lagi** |
+| `make service-stop` / `status` / `logs` / `uninstall` | Kelola service |
 | `make dev` | Pengembangan: backend + Vite sekaligus (UI :5173, API :8081) |
 | `make help` | Daftar semua target |
 

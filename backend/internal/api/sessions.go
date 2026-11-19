@@ -73,5 +73,12 @@ func (s *Server) deleteSession(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
+	if s.Term != nil {
+		s.Term.KillChat(id)
+	}
+	if s.Web != nil {
+		s.Web.KillChatTabs(id)
+	}
+	_ = s.Store.DeleteToolsTabs(id)
 	return c.JSON(fiber.Map{"ok": true, "mode": mode})
 }

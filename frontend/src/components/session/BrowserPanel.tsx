@@ -9,14 +9,23 @@ import {
   type BrowserInput,
 } from '@/api/browser'
 import { ApiError } from '@/api/http'
+import {
+  activateBrowserTab,
+  createBrowserTab,
+  deleteBrowserTab,
+  fetchToolsTabs,
+  type ToolTab,
+} from '@/api/toolsTabs'
+import { ToolTabBar } from '@/components/session/ToolTabBar'
 import { Button } from '@/components/ui/button'
 
 const FRAME_MS = 700
-
-/** Pembulatan agar ukuran viewport tidak berubah-ubah tiap beberapa piksel. */
 const snap = (n: number) => Math.max(200, Math.round(n / 10) * 10)
 
-export function BrowserPanel() {
+type Props = { sessionId: string }
+
+/** Browser multi-tab per chat (Chrome host + CDP, cookie di profil Ayumi). */
+export function BrowserPanel({ sessionId }: Props) {
   const [available, setAvailable] = useState<boolean | null>(null)
   const [running, setRunning] = useState(false)
   const [address, setAddress] = useState('')
@@ -25,14 +34,17 @@ export function BrowserPanel() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [src, setSrc] = useState<string | null>(null)
+  const [tabs, setTabs] = useState<ToolTab[]>([])
+  const [activeId, setActiveId] = useState('')
 
   const boxRef = useRef<HTMLDivElement>(null)
   const imgRef = useRef<HTMLImageElement>(null)
   const sizeRef = useRef({ w: 390, h: 700 })
   const editingAddress = useRef(false)
   const touchY = useRef<number | null>(null)
+  const activeRef = useRef(activeId)
+  activeRef.current = activeId
 
-  // Ukuran area tampilan = ukuran layar virtual browser.
   useEffect(() => {
     const el = boxRef.current
     if (!el) return
@@ -46,16 +58,33 @@ export function BrowserPanel() {
     return () => ro.disconnect()
   }, [])
 
-  // Status awal.
+  const reloadTabs = useCallback(async () => {
+    const data = await fetchToolsTabs(sessionId)
+    setTabs(data.browser)
+    return data.browser
+  }, [sessionId])
+
   useEffect(() => {
     let off = false
     fetchBrowserStatus()
-      .then((s) => {
+      .then(async (s) => {
         if (off) return
         setAvailable(s.available)
         setRunning(s.running)
-        if (s.url) setAddress(s.url)
-        if (s.title) setTitle(s.title)
+        try {
+          let list = await reloadTabs()
+          if (off) return
+          if (list.length === 0 && s.available) {
+            // tab dibuat saat user buka URL / New
+          } else if (list.length) {
+            const a = list.find((t) => t.active) ?? list[0]
+            setActiveId(a.id)
+            if (a.url) setAddress(a.url)
+            setTitle(a.title ?? '')
+          }
+        } catch {
+          /* ignore */
+        }
       })
       .catch((e) => {
         if (!off) {
@@ -66,11 +95,10 @@ export function BrowserPanel() {
     return () => {
       off = true
     }
-  }, [])
+  }, [sessionId, reloadTabs])
 
-  // Ambil frame berkala selama browser hidup dan tab terlihat.
   useEffect(() => {
-    if (!running) return
+    if (!running || !activeId) return
     let off = false
     let timer: number | undefined
     const ctrl = new AbortController()
@@ -81,7 +109,7 @@ export function BrowserPanel() {
       }
       try {
         const f = await fetchBrowserFrame(sizeRef.current.w, sizeRef.current.h, ctrl.signal)
-        if (off) return
+        if (off || activeRef.current !== activeId) return
         setSrc((old) => {
           if (old) URL.revokeObjectURL(old)
           return URL.createObjectURL(f.blob)
@@ -92,7 +120,7 @@ export function BrowserPanel() {
       } catch (e) {
         if (off) return
         if (e instanceof ApiError && e.status === 409) {
-          setRunning(false) // browser dimatikan (idle / ditutup dari tempat lain)
+          setRunning(false)
           return
         }
         if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -107,7 +135,7 @@ export function BrowserPanel() {
       ctrl.abort()
       if (timer) window.clearTimeout(timer)
     }
-  }, [running])
+  }, [running, activeId])
 
   useEffect(
     () => () => {
@@ -123,10 +151,15 @@ export function BrowserPanel() {
     setBusy(true)
     setError(null)
     try {
-      const s = await openBrowser(url, sizeRef.current.w, sizeRef.current.h)
+      const s = await openBrowser(url, sizeRef.current.w, sizeRef.current.h, {
+        sessionId,
+        tabId: activeId || undefined,
+      })
       setRunning(s.running)
+      if (s.tabId) setActiveId(s.tabId)
       if (s.url) setAddress(s.url)
       setTitle(s.title ?? '')
+      await reloadTabs()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal membuka halaman')
     } finally {
@@ -160,8 +193,62 @@ export function BrowserPanel() {
       setRunning(false)
       setSrc(null)
       setTitle('')
+      await reloadTabs()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Gagal menutup browser')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onNew = async () => {
+    setBusy(true)
+    try {
+      const t = await createBrowserTab(sessionId, { title: `Tab ${tabs.length + 1}` })
+      await reloadTabs()
+      setActiveId(t.id)
+      setRunning(true)
+      setAddress(t.url ?? '')
+      setTitle(t.title)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal buat tab')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onSelect = async (id: string) => {
+    setBusy(true)
+    try {
+      const t = await activateBrowserTab(sessionId, id)
+      setActiveId(id)
+      setRunning(t.alive !== false)
+      setAddress(t.url ?? '')
+      setTitle(t.title)
+      await reloadTabs()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal pilih tab')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onCloseTab = async (id: string) => {
+    setBusy(true)
+    try {
+      await deleteBrowserTab(sessionId, id)
+      const list = await reloadTabs()
+      if (activeId === id) {
+        if (list[0]) {
+          await onSelect(list[0].id)
+        } else {
+          setActiveId('')
+          setRunning(false)
+          setSrc(null)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Gagal tutup tab')
     } finally {
       setBusy(false)
     }
@@ -173,7 +260,8 @@ export function BrowserPanel() {
         <Globe className="h-8 w-8 text-muted-foreground" />
         <p className="text-sm text-foreground">Browser tidak tersedia</p>
         <p className="max-w-sm text-xs text-muted-foreground">
-          {error ?? 'Chromium/Chrome tidak ditemukan di server. Docker: bangun ulang image. Native: pasang Chrome atau set AYUMI_BROWSER_BIN.'}
+          {error ??
+            'Chrome/Chromium tidak ditemukan. Native: pasang Chrome atau set AYUMI_BROWSER_BIN. Docker: bangun dengan WITH_BROWSER.'}
         </p>
       </div>
     )
@@ -181,6 +269,14 @@ export function BrowserPanel() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e]">
+      <ToolTabBar
+        tabs={tabs}
+        activeId={activeId}
+        onSelect={(id) => void onSelect(id)}
+        onClose={(id) => void onCloseTab(id)}
+        onNew={() => void onNew()}
+        busy={busy}
+      />
       <form
         className="flex shrink-0 items-center gap-1.5 border-b border-border/50 px-2 py-2"
         onSubmit={(e) => {
@@ -225,7 +321,7 @@ export function BrowserPanel() {
             src={src}
             alt={title || 'Tampilan browser'}
             draggable={false}
-            className="absolute left-0 top-0 block h-full w-full select-none object-fill"
+            className="absolute top-0 left-0 block h-full w-full object-fill select-none"
             onClick={(e) => {
               const p = toPoint(e.clientX, e.clientY)
               if (p) void act({ type: 'click', ...p })
@@ -241,7 +337,7 @@ export function BrowserPanel() {
               const t = e.touches[0]
               if (!t || touchY.current === null) return
               const dy = touchY.current - t.clientY
-              if (Math.abs(dy) < 24) return // gerakan kecil dianggap ketukan, bukan gulir
+              if (Math.abs(dy) < 24) return
               touchY.current = t.clientY
               const p = toPoint(t.clientX, t.clientY)
               if (p) void act({ type: 'scroll', ...p, deltaY: dy * 2 })
@@ -259,8 +355,8 @@ export function BrowserPanel() {
                 <Globe className="h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-foreground">Browser di server</p>
                 <p className="max-w-xs text-xs text-muted-foreground">
-                  Chromium berjalan di mesin tempat Ayumi Link dipasang. Login situs tersimpan (cookie) dan bertahan
-                  setelah browser dimatikan. Browser mati otomatis bila lama tidak dipakai.
+                  Chrome host + profil khusus Ayumi (cookie tersimpan). Multi-tab per chat. Idle ~10 menit lalu mati;
+                  buka lagi dari tab tersimpan.
                 </p>
               </>
             )}

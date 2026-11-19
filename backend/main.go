@@ -24,6 +24,7 @@ import (
 	"ayumi-link/internal/config"
 	"ayumi-link/internal/fsbrowse"
 	"ayumi-link/internal/store"
+	"ayumi-link/internal/termpty"
 	"ayumi-link/internal/uploads"
 )
 
@@ -81,18 +82,26 @@ func main() {
 	}
 	runner := &claude.Runner{Svc: svc, Browser: browser, Store: st, Bin: bin, DefaultPerm: cfg.PermissionMode, Uploads: up, Auth: cliAuth}
 	shell := claude.NewShell(browser, svc, cliAuth)
+	idle := time.Duration(envMinutes("AYUMI_BROWSER_IDLE_MIN", 10)) * time.Minute
+	term := termpty.New(browser, st, func(id string) (string, error) {
+		return svc.SessionCwd(id)
+	}, idle)
 	var web *webbrowser.Manager
 	if !truthy(os.Getenv("AYUMI_BROWSER_DISABLED")) {
-		idle := time.Duration(envMinutes("AYUMI_BROWSER_IDLE_MIN", 10)) * time.Minute
 		web = webbrowser.New(cfg.DataDir, os.Getenv("AYUMI_BROWSER_BIN"), idle)
+		web.SetStore(st)
 		if web.Available() {
-			log.Printf("browser: %s", web.Bin())
+			log.Printf("browser: %s (profil khusus Ayumi)", web.Bin())
 		} else {
-			log.Printf("browser: Chromium tidak ditemukan; tab Browser dimatikan")
+			log.Printf("browser: Chrome/Chromium tidak ditemukan; tab Browser dimatikan")
 		}
 	}
 
-	app := api.New(api.Deps{Config: cfg, Auth: authMgr, Svc: svc, Runner: runner, Browser: browser, Store: st, Shell: shell, Web: web, CliAuth: cliAuth, Uploads: up})
+	app := api.New(api.Deps{Config: cfg, Auth: authMgr, Svc: svc, Runner: runner, Browser: browser, Store: st, Shell: shell, Term: term, Web: web, CliAuth: cliAuth, Uploads: up})
+	defer term.CloseAll()
+	if web != nil {
+		defer web.Close()
+	}
 
 	log.Printf("ayumi-link %s listening on %s (claude=%s)", config.Version, cfg.Addr(), bin)
 	if envFile != "" {

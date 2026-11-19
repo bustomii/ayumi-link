@@ -29,11 +29,13 @@ CLI on your own machine does the work.
 - **Per-message model / effort / tool-permission** menu (Fable, Opus, Sonnet, Haiku and older models).
 - **Rename, move, hide or delete** sessions and folders (local to Ayumi Link; never edits Claude's data).
 - **Fork to another folder:** if a session's folder was deleted, renamed or is not available (e.g. a Mac path inside Docker), pick a new folder and the session is copied (forked) there, like Claude Desktop; the original stays untouched.
-- **Browser tab:** a headless Chromium on the server (Docker image or your own Chrome/Chromium when
-  run natively) streamed into the UI — open sites, click, type, scroll. Site logins persist (cookies +
-  profile live in the data dir); it shuts itself down after `AYUMI_BROWSER_IDLE_MIN` idle minutes.
-  Disable with `AYUMI_BROWSER_DISABLED=true`, or skip Chromium in the image with
-  `--build-arg WITH_BROWSER=false`. Only http/https; it browses from the **server's** network.
+- **Terminal (full PTY):** xterm.js + WebSocket per chat; multi-tab (max 5). Host shell when run
+  natively; container shell in Docker. Idle ~10 min / reconnect grace ~2 min; tab metadata in
+  `tools-tabs.json`.
+- **Browser (multi-tab per chat):** host Chrome/Chromium/Edge via CDP (native preferred) with a
+  dedicated `browser-profile/` under the data dir (not your daily Chrome profile). Cookies/logins
+  persist; process stops after `AYUMI_BROWSER_IDLE_MIN`. Docker may install Chromium with
+  `WITH_BROWSER`; disable with `AYUMI_BROWSER_DISABLED=true`. Only http/https from the **server**.
 - **Real authentication:** argon2id password, TOTP 2FA, one-time recovery codes, account lockout,
   device list with remote sign-out, step-up re-verification for sensitive actions.
 - **Access control from `.env`:** client **IP allowlist**, trusted-proxy support, cookie hardening.
@@ -72,6 +74,9 @@ make dev               # API :8081 + Vite HMR :5173 (one command, Ctrl+C stops b
 | Command | What it does |
 |---|---|
 | `make build` | Production-style: build frontend + Go binary, then serve everything on **:8081** |
+| `make service-install` | Install macOS LaunchAgent (`com.ayumi.link`); each start runs **`make build`** |
+| `make service-restart` | Restart the agent → **`make build` again** (native redeploy) |
+| `make service-stop` / `status` / `logs` / `uninstall` | Manage the LaunchAgent |
 | `make dev` | Development: backend + Vite together (UI at :5173, API at :8081) |
 | `make help` | List all targets |
 

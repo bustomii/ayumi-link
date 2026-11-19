@@ -2,10 +2,10 @@
 .DEFAULT_GOAL := help
 COMPOSE ?= docker compose
 
-.PHONY: help build dev up up-docker redeploy down restart logs token claude-login reset-auth shell ps test docker-build
+.PHONY: help build dev service-install service-uninstall service-start service-stop service-restart service-status service-logs up up-docker redeploy down restart logs token claude-login reset-auth shell ps test docker-build
 
 help: ## Show this help
-	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-14s %s\n", $$1, $$2}'
+	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 # ---- Native (tanpa Docker) ----
 
@@ -16,6 +16,30 @@ build: ## Native: build FE+BE and serve on http://localhost:8081
 dev: ## Native: API :8081 + Vite HMR :5173 (satu perintah)
 	@chmod +x scripts/native-dev.sh
 	@sh scripts/native-dev.sh
+
+# LaunchAgent: setiap restart = make build lagi (lihat skill ayumi-link-native-service)
+service-install: ## Native: pasang LaunchAgent + start (com.ayumi.link)
+	@chmod +x scripts/native-service.sh scripts/native-service-run.sh scripts/native-build.sh
+	@sh scripts/native-service.sh install
+
+service-uninstall: ## Native: hapus LaunchAgent
+	@sh scripts/native-service.sh uninstall
+
+service-start: ## Native: start service
+	@sh scripts/native-service.sh start
+
+service-stop: ## Native: stop service
+	@sh scripts/native-service.sh stop
+
+service-restart: ## Native: restart → make build jalan lagi (redeploy)
+	@chmod +x scripts/native-service.sh scripts/native-service-run.sh scripts/native-build.sh
+	@sh scripts/native-service.sh restart
+
+service-status: ## Native: status LaunchAgent
+	@sh scripts/native-service.sh status
+
+service-logs: ## Native: tail log LaunchAgent
+	@sh scripts/native-service.sh logs
 
 # ---- Docker ----
 

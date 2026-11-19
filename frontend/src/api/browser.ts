@@ -1,6 +1,6 @@
 import { api, toApiError } from './http'
 
-export type BrowserStatus = { available: boolean; running: boolean; url?: string; title?: string }
+export type BrowserStatus = { available: boolean; running: boolean; url?: string; title?: string; tabId?: string }
 
 export type BrowserInput =
   | { type: 'click'; x: number; y: number }
@@ -11,8 +11,16 @@ export type BrowserInput =
 
 export const fetchBrowserStatus = () => api<BrowserStatus>('/api/browser')
 
-export const openBrowser = (url: string, width: number, height: number) =>
-  api<BrowserStatus>('/api/browser/open', { method: 'POST', json: { url, width, height } })
+export const openBrowser = (
+  url: string,
+  width: number,
+  height: number,
+  opts?: { sessionId?: string; tabId?: string },
+) =>
+  api<BrowserStatus>('/api/browser/open', {
+    method: 'POST',
+    json: { url, width, height, sessionId: opts?.sessionId, tabId: opts?.tabId },
+  })
 
 export const sendBrowserInput = (input: BrowserInput) =>
   api<{ ok: boolean }>('/api/browser/input', { method: 'POST', json: input })

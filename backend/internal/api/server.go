@@ -22,7 +22,10 @@ import (
 	"ayumi-link/internal/config"
 	"ayumi-link/internal/fsbrowse"
 	"ayumi-link/internal/store"
+	"ayumi-link/internal/termpty"
 	"ayumi-link/internal/uploads"
+
+	"github.com/gofiber/contrib/websocket"
 )
 
 const cookieName = "ayumi_session"
@@ -35,10 +38,11 @@ type Deps struct {
 	Runner  *claude.Runner
 	Browser *fsbrowse.Browser
 	Store   *store.Store
-	Shell   *claude.Shell    // satu terminal interaktif (cd bertahan)
-	Web     *browser.Manager // Chromium headless untuk tab Browser (nil = dimatikan)
-	CliAuth *claude.CliAuth  // login Claude CLI dari settings (nil = tidak tersedia)
-	Uploads *uploads.Manager // lampiran chat (nil = fitur dimatikan)
+	Shell   *claude.Shell      // shell command-box legacy (opsional)
+	Term    *termpty.Manager   // terminal PTY penuh multi-tab
+	Web     *browser.Manager   // Chrome host CDP + multi-tab Browser (nil = dimatikan)
+	CliAuth *claude.CliAuth    // login Claude CLI dari settings (nil = tidak tersedia)
+	Uploads *uploads.Manager   // lampiran chat (nil = fitur dimatikan)
 }
 
 type Server struct {
@@ -118,6 +122,12 @@ func New(d Deps) *fiber.App {
 	p.Get("/sessions/:id/changes/diff", s.getSessionChangeDiff)
 	p.Get("/terminal", s.enterTerminal)
 	p.Post("/terminal", s.runTerminal)
+	p.Get("/sessions/:id/tools/tabs", s.listToolsTabs)
+	p.Post("/sessions/:id/terminal/tabs", s.createTerminalTab)
+	p.Delete("/sessions/:id/terminal/tabs/:tabId", s.deleteTerminalTab)
+	p.Post("/sessions/:id/browser/tabs", s.createBrowserTab)
+	p.Delete("/sessions/:id/browser/tabs/:tabId", s.deleteBrowserTab)
+	p.Post("/sessions/:id/browser/tabs/:tabId/activate", s.activateBrowserTab)
 	p.Get("/browser", s.webStatus)
 	p.Post("/browser/open", s.webOpen)
 	p.Get("/browser/frame", s.webFrame)
@@ -150,6 +160,12 @@ func New(d Deps) *fiber.App {
 	p.Get("/claude/auth", s.getClaudeAuth)
 	p.Put("/claude/auth", authLimit, s.putClaudeAuth)
 	p.Delete("/claude/auth", authLimit, s.deleteClaudeAuth)
+
+	// WebSocket terminal (auth cookie dicek di middleware grup p).
+	p.Get("/terminal/ws", websocket.New(s.handleTerminalWS, websocket.Config{
+		ReadBufferSize:  4096,
+		WriteBufferSize: 4096,
+	}))
 
 	api.Use(func(c *fiber.Ctx) error { return fiber.NewError(fiber.StatusNotFound, "tidak ditemukan") })
 

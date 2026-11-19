@@ -301,7 +301,7 @@ export function ChatPanel({
       {tab === 'changes' && canTools ? (
         <ChangesPanel sessionId={session!.id} />
       ) : tab === 'browser' && canTools ? (
-        <BrowserPanel />
+        <BrowserPanel sessionId={session!.id} />
       ) : tab === 'terminal' && canTools ? (
         <TerminalPanel sessionId={session!.id} />
       ) : (

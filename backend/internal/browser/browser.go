@@ -22,6 +22,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ayumi-link/internal/store"
 )
 
 var (
@@ -55,20 +57,24 @@ type Input struct {
 
 type Manager struct {
 	bin     string
-	dir     string // <data>/browser
+	dir     string // <data>/browser (cookies); profile di browser-profile atau browser/profile
 	idle    time.Duration
+	store   *store.Store
 	mu      sync.Mutex
 	cmd     *exec.Cmd
 	exited  chan struct{}
 	port    string
 	target  string
 	cdp     *cdpClient
+	pages   map[string]*pageTab // tabId -> page
+	activeTab string
 	w, h    int
 	last    time.Time
 	stopSav chan struct{}
 }
 
 // New menyiapkan manager. bin kosong = cari otomatis. idle = lama tanpa dipakai sebelum Chromium dimatikan.
+// Profil Chrome khusus Ayumi: <dataDir>/browser-profile (cookie bagus, tidak kunci profil harian).
 func New(dataDir, bin string, idle time.Duration) *Manager {
 	if bin == "" {
 		bin = findBin()
@@ -76,10 +82,16 @@ func New(dataDir, bin string, idle time.Duration) *Manager {
 	if idle <= 0 {
 		idle = 10 * time.Minute
 	}
-	m := &Manager{bin: bin, dir: filepath.Join(dataDir, "browser"), idle: idle, w: defaultW, h: defaultH}
+	m := &Manager{
+		bin: bin, dir: filepath.Join(dataDir, "browser"), idle: idle,
+		w: defaultW, h: defaultH, pages: map[string]*pageTab{},
+	}
 	go m.idleLoop()
 	return m
 }
+
+// SetStore menghubungkan persistensi tab browser per chat.
+func (m *Manager) SetStore(st *store.Store) { m.store = st }
 
 // Bin: path Chromium yang dipakai ("" bila tidak ada).
 func (m *Manager) Bin() string { return m.bin }
@@ -130,7 +142,11 @@ func (m *Manager) ensure(ctx context.Context) error {
 	}
 	m.stopLocked() // sisa proses lama
 
-	profile := filepath.Join(m.dir, "profile")
+	// Profil khusus Ayumi (bukan Chrome harian) — cookie bertahan, tanpa profile lock.
+	profile := filepath.Join(filepath.Dir(m.dir), "browser-profile")
+	if _, err := os.Stat(filepath.Join(m.dir, "profile")); err == nil {
+		profile = filepath.Join(m.dir, "profile") // migrasi: pakai profil lama bila ada
+	}
 	if err := os.MkdirAll(profile, 0o700); err != nil {
 		return err
 	}
@@ -264,12 +280,18 @@ func (m *Manager) stopLocked() {
 		close(m.stopSav)
 		m.stopSav = nil
 	}
-	if m.cdp != nil {
-		if m.cdp.alive() {
-			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-			m.saveCookies(ctx)
-			cancel()
+	if m.cdp != nil && m.cdp.alive() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		m.saveCookies(ctx)
+		cancel()
+	}
+	for id, p := range m.pages {
+		if p.cdp != nil {
+			p.cdp.close()
 		}
+		delete(m.pages, id)
+	}
+	if m.cdp != nil {
 		m.cdp.close()
 		m.cdp = nil
 	}
@@ -286,7 +308,7 @@ func (m *Manager) stopLocked() {
 			}
 		}
 	}
-	m.cmd, m.port, m.target = nil, "", ""
+	m.cmd, m.port, m.target, m.activeTab = nil, "", "", ""
 }
 
 // Close mematikan browser (cookie disimpan lebih dulu).
@@ -312,10 +334,11 @@ func (m *Manager) idleLoop() {
 func (m *Manager) cookieFile() string { return filepath.Join(m.dir, "cookies.json") }
 
 func (m *Manager) saveCookies(ctx context.Context) {
-	if m.cdp == nil {
+	cdp := m.activePageLocked()
+	if cdp == nil {
 		return
 	}
-	raw, err := m.cdp.call(ctx, "Network.getAllCookies", nil)
+	raw, err := cdp.call(ctx, "Network.getAllCookies", nil)
 	if err != nil {
 		return
 	}
@@ -402,7 +425,11 @@ func clampDim(v, def int) int {
 }
 
 func (m *Manager) applyViewport(ctx context.Context) {
-	_, _ = m.cdp.call(ctx, "Emulation.setDeviceMetricsOverride", map[string]any{
+	cdp := m.activePageLocked()
+	if cdp == nil {
+		return
+	}
+	_, _ = cdp.call(ctx, "Emulation.setDeviceMetricsOverride", map[string]any{
 		"width": m.w, "height": m.h, "deviceScaleFactor": 1, "mobile": false,
 	})
 }
@@ -416,7 +443,7 @@ func (m *Manager) setSizeLocked(ctx context.Context, w, h int) {
 	}
 }
 
-// Open menyalakan browser bila perlu lalu membuka url.
+// Open menyalakan browser bila perlu lalu membuka url pada tab aktif (legacy / tanpa chat).
 func (m *Manager) Open(ctx context.Context, rawURL string, w, h int) (Info, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -427,8 +454,12 @@ func (m *Manager) Open(ctx context.Context, rawURL string, w, h int) (Info, erro
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	m.setSizeLocked(cctx, w, h)
+	cdp := m.activePageLocked()
+	if cdp == nil {
+		return Info{}, ErrNotRunning
+	}
 	if rawURL != "" {
-		res, err := m.cdp.call(cctx, "Page.navigate", map[string]any{"url": rawURL})
+		res, err := cdp.call(cctx, "Page.navigate", map[string]any{"url": rawURL})
 		if err != nil {
 			return Info{}, err
 		}
@@ -472,18 +503,22 @@ func (m *Manager) Status(ctx context.Context) Info {
 	return m.infoLocked(ctx)
 }
 
-// Frame mengambil screenshot JPEG halaman saat ini (tanpa menyalakan browser).
+// Frame mengambil screenshot JPEG halaman aktif (tanpa menyalakan browser).
 func (m *Manager) Frame(ctx context.Context, w, h int) ([]byte, Info, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cmd == nil || m.cdp == nil || !m.cdp.alive() {
+	cdp := m.activePageLocked()
+	if m.cmd == nil || cdp == nil || !cdp.alive() {
 		return nil, Info{}, ErrNotRunning
 	}
 	m.last = time.Now()
+	if p := m.pages[m.activeTab]; p != nil {
+		p.last = m.last
+	}
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	m.setSizeLocked(cctx, w, h)
-	res, err := m.cdp.call(cctx, "Page.captureScreenshot", map[string]any{"format": "jpeg", "quality": 60})
+	res, err := cdp.call(cctx, "Page.captureScreenshot", map[string]any{"format": "jpeg", "quality": 60})
 	if err != nil {
 		return nil, Info{}, err
 	}
@@ -520,18 +555,22 @@ var keyCodes = map[string]struct {
 	"PageDown":   {"PageDown", 34, ""},
 }
 
-// Do menjalankan satu aksi pengguna pada halaman.
+// Do menjalankan satu aksi pengguna pada halaman aktif.
 func (m *Manager) Do(ctx context.Context, in Input) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cmd == nil || m.cdp == nil || !m.cdp.alive() {
+	cdp := m.activePageLocked()
+	if m.cmd == nil || cdp == nil || !cdp.alive() {
 		return ErrNotRunning
 	}
 	m.last = time.Now()
+	if p := m.pages[m.activeTab]; p != nil {
+		p.last = m.last
+	}
 	cctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
 	call := func(method string, p any) error {
-		_, err := m.cdp.call(cctx, method, p)
+		_, err := cdp.call(cctx, method, p)
 		return err
 	}
 	switch in.Type {
