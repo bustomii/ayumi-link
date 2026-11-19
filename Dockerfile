@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 ARG WITH_DOCKER_CLI=off
 #
 # Ayumi Link — single image: Go (Fiber) API + built React frontend + Claude Code CLI.
