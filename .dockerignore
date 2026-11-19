@@ -1,0 +1,20 @@
+# Keep the build context small and never ship secrets or local state.
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
+CLOUDE.md
+LICENSE
+Makefile
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+frontend/node_modules
+frontend/dist
+frontend/.vite
+backend/ayumi-link
+workspace
+.DS_Store

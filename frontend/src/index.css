@@ -1,0 +1,250 @@
+@import "tailwindcss";
+
+@theme {
+  --color-background: #0c0d10;
+  --color-foreground: #e8e9ed;
+  --color-muted: #16181d;
+  --color-muted-foreground: #9aa0ab;
+  --color-border: #2a2e37;
+  --color-card: #12141a;
+  --color-primary: #3d8bfd;
+  --color-primary-foreground: #f8fafc;
+  --color-accent: #3d8bfd;
+  --color-accent-foreground: #f8fafc;
+  --color-sidebar: #0e1014;
+  --font-sans: "IBM Plex Sans", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Safe area + tinggi viewport (di-override JS di iOS PWA lewat visualViewport) */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
+  --app-height: 100dvh;
+  --app-top: 0px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  height: var(--app-height);
+  max-height: var(--app-height);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background: var(--color-background);
+  color: var(--color-foreground);
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* Shell mengisi tepat visualViewport (non-iOS / Android PWA) */
+.app-shell {
+  position: fixed;
+  top: var(--app-top);
+  left: 0;
+  right: 0;
+  height: var(--app-height);
+  max-height: var(--app-height);
+  width: 100%;
+  overflow: hidden;
+}
+
+/* iOS PWA: shell menempel ke seluruh layar fisik (termasuk area notch & home indicator).
+   100% pada html fixed di iOS standalone kadang lebih pendek dari layar (celah kosong di bawah,
+   konten terdorong ke atas), jadi tinggi dipaksa ke 100lvh dengan fallback bertingkat. */
+html.ios-pwa,
+html.ios-pwa body,
+html.ios-pwa #root {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100lvh;
+  max-height: none;
+  overflow: hidden;
+}
+
+html.ios-pwa .app-shell {
+  position: fixed;
+  inset: 0;
+  top: 0;
+  width: 100%;
+  height: 100vh;
+  height: -webkit-fill-available;
+  height: 100lvh;
+  max-height: none;
+  /* home indicator tipis: separuh safe-area cukup, tanpa celah kosong besar di bawah */
+  padding-bottom: calc(var(--safe-b) * 0.5);
+}
+
+/* Sidebar overlay mobile di iOS PWA: full height viewport */
+@media (max-width: 767px) {
+  html.ios-pwa aside.fixed {
+    top: 0 !important;
+    height: 100lvh !important;
+    max-height: none !important;
+  }
+}
+
+
+.chat-md {
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.chat-md > :first-child {
+  margin-top: 0;
+}
+
+.chat-md > :last-child {
+  margin-bottom: 0;
+}
+
+.chat-md p {
+  margin: 0.45em 0;
+}
+
+.chat-md strong {
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.chat-md ul,
+.chat-md ol {
+  margin: 0.45em 0;
+  padding-left: 1.15rem;
+}
+
+.chat-md li {
+  margin: 0.2em 0;
+}
+
+.chat-md code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8em;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0.35rem;
+  padding: 0.1em 0.35em;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.chat-md pre {
+  margin: 0;
+  max-width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 0;
+}
+
+.chat-md a {
+  color: #7db4ff;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+
+.chat-md h1,
+.chat-md h2,
+.chat-md h3 {
+  margin: 0.65em 0 0.3em;
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.chat-md h1 {
+  font-size: 1.05em;
+}
+
+.chat-md h2 {
+  font-size: 1em;
+}
+
+.chat-md h3 {
+  font-size: 0.95em;
+}
+
+.chat-table-wrap {
+  margin: 0.65em 0;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: #0f1116;
+}
+
+.chat-md table {
+  width: 100%;
+  min-width: 28rem;
+  border-collapse: collapse;
+  table-layout: auto;
+  font-size: 0.82em;
+  line-height: 1.45;
+}
+
+.chat-md thead th {
+  position: sticky;
+  top: 0;
+  background: #1a1d26;
+  color: #f3f4f6;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chat-md tbody td {
+  vertical-align: top;
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid rgba(42, 46, 55, 0.85);
+  color: #d5d8e0;
+}
+
+.chat-md tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.chat-md tbody tr:nth-child(even) td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.chat-md tbody tr:hover td {
+  background: rgba(61, 139, 253, 0.06);
+}
+
+.chat-md td code,
+.chat-md th code {
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .chat-md table {
+    min-width: 22rem;
+    font-size: 0.78em;
+  }
+
+  .chat-md thead th,
+  .chat-md tbody td {
+    padding: 0.55rem 0.7rem;
+  }
+}

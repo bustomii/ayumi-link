@@ -1,0 +1,26 @@
+# OPTIONAL override: lets the Terminal tab (and Claude's shell) run `docker` / `docker compose`
+# against the HOST's Docker daemon, even though Ayumi Link itself runs in a container.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.host-docker.yml up -d --build
+#
+# WARNING: access to the Docker socket is equivalent to root on the host. Anyone who gets into
+# Ayumi Link (or Claude running in it) can control every container and mount any host folder.
+# Enable it only behind the login + 2FA + IP allowlist, on a machine you own.
+#
+# Notes
+#  - Run `sh scripts/detect-docker.sh` (or `make up-docker`) to detect the socket + group of this
+#    machine automatically (Docker Desktop, OrbStack, Colima, Rancher Desktop, Linux, rootless).
+#  - Docker Desktop (macOS/Windows): works as is. Linux: set DOCKER_GID in .env to the group of
+#    the socket:   stat -c %g /var/run/docker.sock
+#  - Paths in a compose file are resolved by the HOST daemon, so a bind mount like ./data inside
+#    /workspace/app points at a folder that does not exist on the host. Use named volumes, or
+#    mount your projects at the same absolute path as on the host.
+services:
+  ayumi-link:
+    build:
+      args:
+        WITH_DOCKER_CLI: "on"
+    volumes:
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
+    group_add:
+      - "${DOCKER_GID:-0}"

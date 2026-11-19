@@ -1,0 +1,63 @@
+# One command builds and runs everything:
+#   docker compose up -d --build
+# Then open http://localhost:8081 and create your account. The one-time setup token is in the logs:
+#   docker compose logs ayumi-link | grep -A1 "SETUP"
+name: ayumi-link
+
+services:
+  ayumi-link:
+    build:
+      context: .
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-latest}
+        EXTRA_APT_PACKAGES: ${EXTRA_APT_PACKAGES:-}
+    image: ayumi-link:local
+    container_name: ayumi-link
+    restart: unless-stopped
+
+    # Optional .env (copy .env.example). `required: false` needs Docker Compose >= 2.24.
+    env_file:
+      - path: .env
+        required: false
+    # These win over .env: inside the container the app must listen on all interfaces and use
+    # the mounted paths. Who can reach it is decided by the published port below.
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8081"
+      AYUMI_DATA_DIR: /data
+      # Folder yang boleh dipilih untuk session baru. Default /workspace; override di .env
+      # agar sama dengan path host (penting agar resume session Desktop juga lolos ResolveDir).
+      AYUMI_ROOTS: ${AYUMI_ROOTS:-/workspace}
+      AYUMI_STATIC_DIR: /app/web
+      CLAUDE_HOME: /home/node/.claude
+      # Samakan path dengan host bila CLAUDE_DESKTOP_HOST_DIR di-mount 1:1 (lihat volumes).
+      CLAUDE_DESKTOP_DIR: ${CLAUDE_DESKTOP_DIR:-/claude-desktop}
+      # Wajib CLI Linux dari image (npm @anthropic-ai/claude-code), bukan binary .app macOS.
+      CLAUDE_BIN: ${CLAUDE_BIN:-claude}
+
+    ports:
+      # Loopback by default. Set AYUMI_BIND to your LAN/Tailscale IP to reach it from a phone.
+      - "${AYUMI_BIND:-127.0.0.1}:${AYUMI_PORT:-8081}:8081"
+
+    volumes:
+      - ayumi-data:/data                           # account, 2FA, sessions, app state
+      # Claude login + session transcripts. Default: a private volume (starts empty). To see the
+      # sessions of your own machine, set CLAUDE_HOME_DIR=/Users/<you>/.claude in .env (bind mount).
+      - ${CLAUDE_HOME_DIR:-ayumi-claude}:/home/node/.claude
+      # .claude.json: jangan bind-mount dari host (Docker Desktop sering ghost file → chat gagal).
+      # Login Claude lewat UI Profil → Claude CLI (token di /data). File config dibuat CLI di container.
+      # Claude Desktop config + session index (group names). Mount di path host yang sama
+      # supaya cwd scratch Desktop tetap resolve. Fallback: ./docker/empty-claude-desktop → /claude-desktop.
+      - ${CLAUDE_DESKTOP_HOST_DIR:-./docker/empty-claude-desktop}:${CLAUDE_DESKTOP_DIR:-/claude-desktop}
+      # Project folders for "session baru". Prefer mount host path → path yang sama di container
+      # (mis. /Users/me/Public/Working:/Users/me/Public/Working) + AYUMI_ROOTS=path itu.
+      - ${WORKSPACE_DIR:-./workspace}:${WORKSPACE_MOUNT:-/workspace}
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  ayumi-data:
+  ayumi-claude:
