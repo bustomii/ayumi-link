@@ -38,11 +38,11 @@ type Deps struct {
 	Runner  *claude.Runner
 	Browser *fsbrowse.Browser
 	Store   *store.Store
-	Shell   *claude.Shell      // shell command-box legacy (opsional)
-	Term    *termpty.Manager   // terminal PTY penuh multi-tab
-	Web     *browser.Manager   // Chrome host CDP + multi-tab Browser (nil = dimatikan)
-	CliAuth *claude.CliAuth    // login Claude CLI dari settings (nil = tidak tersedia)
-	Uploads *uploads.Manager   // lampiran chat (nil = fitur dimatikan)
+	Shell   *claude.Shell    // shell command-box legacy (opsional)
+	Term    *termpty.Manager // terminal PTY penuh multi-tab
+	Web     *browser.Manager // Chrome host CDP + multi-tab Browser (nil = dimatikan)
+	CliAuth *claude.CliAuth  // login Claude CLI dari settings (nil = tidak tersedia)
+	Uploads *uploads.Manager // lampiran chat (nil = fitur dimatikan)
 }
 
 type Server struct {
@@ -50,6 +50,9 @@ type Server struct {
 
 	versionOnce   sync.Once
 	claudeVersion string
+
+	diskSyncMu sync.Mutex
+	diskSyncAt time.Time
 }
 
 // New membangun aplikasi Fiber lengkap dengan middleware dan rute.
@@ -139,6 +142,17 @@ func New(d Deps) *fiber.App {
 	p.Put("/groups/rename", s.renameGroup)
 	p.Delete("/sessions/:id", s.deleteSession)
 	p.Post("/chat", s.chat)
+	p.Get("/agents", s.listAgents)
+	p.Post("/agents", s.createAgent)
+	p.Get("/agents/:id", s.getAgent)
+	p.Put("/agents/:id", s.updateAgent)
+	p.Delete("/agents/:id", s.deleteAgent)
+	p.Get("/skills", s.listSkills)
+	p.Post("/skills", s.createSkill)
+	p.Get("/skills/:id", s.getSkill)
+	p.Put("/skills/:id", s.updateSkill)
+	p.Delete("/skills/:id", s.deleteSkill)
+	p.Post("/agents-skills/generate-prompt", s.generateAgentsSkillsPrompt)
 	p.Get("/fs", s.browse)
 	if d.Uploads != nil {
 		p.Get("/uploads/limits", s.uploadLimits)

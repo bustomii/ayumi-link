@@ -152,20 +152,34 @@ func (m *Manager) ensure(ctx context.Context) error {
 	}
 	_ = os.Remove(filepath.Join(profile, "DevToolsActivePort"))
 
+	// Native default: headed (seperti Claude Desktop / Cursor) — Cloudflare jarang lolos headless.
+	// Docker/container tetap headless kecuali AYUMI_BROWSER_HEADLESS=false + display tersedia.
+	headless := wantHeadless()
 	args := []string{
-		"--headless=new",
 		"--remote-debugging-port=0",
 		"--user-data-dir=" + profile,
 		"--no-first-run", "--no-default-browser-check",
-		"--disable-gpu", "--disable-dev-shm-usage", "--disable-extensions",
-		"--disable-background-networking", "--disable-sync", "--disable-translate",
-		"--mute-audio", "--hide-scrollbars",
-		"--renderer-process-limit=2",
+		"--disable-blink-features=AutomationControlled",
+		"--disable-dev-shm-usage",
+		"--mute-audio",
+		fmt.Sprintf("--window-size=%d,%d", max(m.w, 1024), max(m.h, 768)),
+	}
+	if headless {
+		args = append(args,
+			"--headless=new",
+			"--disable-gpu",
+			"--hide-scrollbars",
+			"--renderer-process-limit=2",
+		)
+	} else {
+		// Jendela di luar layar supaya tidak mengganggu, tapi tetap “browser sungguhan”.
+		args = append(args, "--window-position=-2400,-2400")
 	}
 	if inContainer() || truthy(os.Getenv("AYUMI_BROWSER_NO_SANDBOX")) {
 		args = append(args, "--no-sandbox")
 	}
 	args = append(args, "about:blank")
+	log.Printf("browser start headless=%v bin=%s", headless, m.bin)
 
 	cmd := exec.Command(m.bin, args...)
 	cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
@@ -201,6 +215,8 @@ func (m *Manager) ensure(ctx context.Context) error {
 		m.stopLocked()
 		return err
 	}
+	_, _ = m.cdp.call(cctx, "Network.enable", nil)
+	m.hardenPage(cctx, m.cdp)
 	m.restoreCookies(cctx)
 	m.applyViewport(cctx)
 
@@ -208,6 +224,73 @@ func (m *Manager) ensure(ctx context.Context) error {
 	go m.cookieSaver(m.cdp, m.stopSav)
 	return nil
 }
+
+func wantHeadless() bool {
+	if v := strings.TrimSpace(os.Getenv("AYUMI_BROWSER_HEADLESS")); v != "" {
+		return truthy(v)
+	}
+	// Di container biasanya tidak ada display → headless.
+	if inContainer() {
+		return true
+	}
+	return false
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// hardenPage mengurangi sinyal otomasi (webdriver) agar situs seperti Cloudflare lebih mirip browser biasa.
+func (m *Manager) hardenPage(ctx context.Context, cdp *cdpClient) {
+	if cdp == nil {
+		return
+	}
+	_, _ = cdp.call(ctx, "Page.addScriptToEvaluateOnNewDocument", map[string]any{
+		"source": stealthJS,
+	})
+	// Juga jalankan di dokumen yang sudah terbuka (about:blank).
+	_, _ = cdp.call(ctx, "Runtime.evaluate", map[string]any{
+		"expression":    stealthJS,
+		"returnByValue": false,
+	})
+}
+
+// Skrip ringan anti-deteksi bot (bukan bypass captcha). Mirip perilaku browser desktop biasa.
+const stealthJS = `(function(){
+  try {
+    Object.defineProperty(navigator, 'webdriver', { get: function(){ return undefined; }, configurable: true });
+  } catch (e) {}
+  try {
+    if (!window.chrome) { window.chrome = { runtime: {} }; }
+  } catch (e) {}
+  try {
+    const p = navigator.permissions;
+    if (p && p.query) {
+      const orig = p.query.bind(p);
+      p.query = function(params) {
+        if (params && params.name === 'notifications') {
+          return Promise.resolve({ state: Notification.permission, onchange: null });
+        }
+        return orig(params);
+      };
+    }
+  } catch (e) {}
+  try {
+    Object.defineProperty(navigator, 'plugins', {
+      get: function(){ return [1, 2, 3, 4, 5]; },
+      configurable: true
+    });
+  } catch (e) {}
+  try {
+    Object.defineProperty(navigator, 'languages', {
+      get: function(){ return ['id-ID', 'id', 'en-US', 'en']; },
+      configurable: true
+    });
+  } catch (e) {}
+})();`
 
 func waitPort(ctx context.Context, file string, exited <-chan struct{}) (string, error) {
 	deadline := time.Now().Add(20 * time.Second)

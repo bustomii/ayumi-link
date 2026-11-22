@@ -1,19 +1,15 @@
 import {
   ChevronDown,
   ChevronRight,
-  ChevronUp,
   EyeOff,
   Folder,
   FolderInput,
-  LogOut,
-  ShieldCheck,
   MessageSquare,
   MoreHorizontal,
   Pencil,
   Plus,
   RefreshCw,
   Trash2,
-  UserRound,
   X,
 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -41,10 +37,6 @@ type Props = {
   onDeleteRequest: (s: Session) => void
   onRenameSession: (s: Session) => void
   onRenameGroup: (name: string) => void
-  username: string
-  onLogout: () => void
-  onOpenProfile: () => void
-  profileActive?: boolean
 }
 
 const COLLAPSE_KEY = 'ayumi-link:collapsed-folders-v3'
@@ -97,10 +89,6 @@ export function SessionSidebar({
   onDeleteRequest,
   onRenameSession,
   onRenameGroup,
-  username,
-  onLogout,
-  onOpenProfile,
-  profileActive = false,
 }: Props) {
   const groups = useMemo(() => groupSessionsByFolder(sessions), [sessions])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -148,39 +136,6 @@ export function SessionSidebar({
   const menuItem = 'flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm hover:bg-white/5'
 
   function renderMenu(m: { key: string; anchor: HTMLElement }) {
-    if (m.key === 'user') {
-      return (
-        <PopoverMenu anchor={m.anchor} onClose={closeMenu} width={232}>
-          <div className="flex items-center gap-2.5 px-2.5 py-2">
-            <UserRound className="h-4 w-4 text-muted-foreground" />
-            <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">Masuk sebagai {username}</p>
-          </div>
-          <div className="my-1 h-px bg-border/60" />
-          <button
-            type="button"
-            className={menuItem}
-            onClick={() => {
-              closeMenu()
-              onOpenProfile()
-            }}
-          >
-            <ShieldCheck className="h-4 w-4 text-emerald-400" />
-            Profil & keamanan
-          </button>
-          <button
-            type="button"
-            className={menuItem}
-            onClick={() => {
-              closeMenu()
-              onLogout()
-            }}
-          >
-            <LogOut className="h-4 w-4 text-red-400" />
-            Keluar
-          </button>
-        </PopoverMenu>
-      )
-    }
     if (m.key.startsWith('group:')) {
       const group = groups.find((g) => `group:${g.key}` === m.key)
       if (!group) return null
@@ -489,31 +444,6 @@ export function SessionSidebar({
         </ScrollArea>
 
         {menu && renderMenu(menu)}
-
-        <div className="shrink-0 border-t border-border/80 p-2">
-          <button
-            type="button"
-            onClick={(e) => toggleMenu('user', e.currentTarget)}
-            aria-haspopup="menu"
-            aria-expanded={menu?.key === 'user'}
-            title="Menu akun"
-            className={cn(
-              'flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-white/5',
-              (menu?.key === 'user' || profileActive) && 'bg-white/5',
-            )}
-          >
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold uppercase text-primary-foreground">
-              {username.slice(0, 1)}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium" title={username}>
-                {username}
-              </span>
-              <span className="block text-[11px] text-muted-foreground">Profil & keamanan</span>
-            </span>
-            <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </button>
-        </div>
       </aside>
     </>
   )

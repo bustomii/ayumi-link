@@ -268,7 +268,7 @@ export function BrowserPanel({ sessionId }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e] ios-tool-pad">
       <ToolTabBar
         tabs={tabs}
         activeId={activeId}

@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchSessionDetail, deleteSession, forkSession, moveSession, renameGroup, renameSession } from '@/api/sessions'
 import type { Attachment, Message, Session } from '@/api/types'
 import { ChatPanel } from '@/components/chat/ChatPanel'
 import { ProfilePage } from '@/components/profile/ProfilePage'
+import { SkillsAgentsPage } from '@/components/skills/SkillsAgentsPage'
 import { NewSessionDialog } from '@/components/sessions/NewSessionDialog'
 import { DeleteSessionDialog, MoveSessionDialog, RenameDialog } from '@/components/sessions/SessionDialogs'
 import { SessionSidebar } from '@/components/sessions/SessionSidebar'
@@ -67,6 +68,7 @@ export function Workspace({ username, onLogout }: Props) {
   const errors = useErrorDialog()
   const [prefs, setPrefs] = usePrefs()
   const [view, setView] = useHashView()
+  const pendingPromptRef = useRef<string | null>(null)
 
   const list = useSessionList()
   const sessionsRef = useLatest(list.sessions)
@@ -111,6 +113,24 @@ export function Workspace({ username, onLogout }: Props) {
     setSidebarOpen(false)
   }, [go, setView])
 
+  const recentCwds = useMemo(
+    () => Array.from(new Set(list.sessions.map((s) => s.cwd).filter(Boolean))),
+    [list.sessions],
+  )
+
+  const startGenerateChat = useCallback(
+    (prompt: string) => {
+      pendingPromptRef.current = prompt
+      const cwd = recentCwds[0] || list.sessions[0]?.cwd
+      if (!cwd) {
+        setNewDialog(true)
+        return
+      }
+      startDraft(cwd)
+    },
+    [list.sessions, recentCwds, startDraft],
+  )
+
   const sendMessage = useCallback(
     async (text: string, atts: Attachment[]) => {
       const key = viewKeyRef.current
@@ -148,6 +168,14 @@ export function Workspace({ username, onLogout }: Props) {
     },
     [activeId, chats, detail, draft, go, list, prefs, viewKeyRef],
   )
+
+  // Setelah draft dibuat dari Generate, kirim prompt ke Claude otomatis.
+  useEffect(() => {
+    if (!draft || !pendingPromptRef.current) return
+    const prompt = pendingPromptRef.current
+    pendingPromptRef.current = null
+    void sendMessage(prompt, [])
+  }, [draft, sendMessage])
 
   const doMove = useCallback(
     async (group: string) => {
@@ -247,15 +275,12 @@ export function Workspace({ username, onLogout }: Props) {
   const shownTitle = shownSession?.title
   useEffect(() => {
     if (view === 'profile') document.title = 'Profil & keamanan · Ayumi Link'
+    else if (view === 'skills') document.title = 'Skills & Agents · Ayumi Link'
     else document.title = shownTitle ? `${shownTitle} · Ayumi Link` : 'Ayumi Link'
   }, [shownTitle, view])
 
   const groupNames = useMemo(
     () => Array.from(new Set(list.sessions.map((s) => s.group).filter((g): g is string => Boolean(g)))),
-    [list.sessions],
-  )
-  const recentCwds = useMemo(
-    () => Array.from(new Set(list.sessions.map((s) => s.cwd).filter(Boolean))),
     [list.sessions],
   )
 
@@ -266,13 +291,6 @@ export function Workspace({ username, onLogout }: Props) {
         activeId={activeId}
         loading={list.loading}
         open={sidebarOpen}
-        username={username}
-        onLogout={onLogout}
-        onOpenProfile={() => {
-          setView('profile')
-          setSidebarOpen(false)
-        }}
-        profileActive={view === 'profile'}
         onClose={() => setSidebarOpen(false)}
         onSelect={selectSession}
         onNewSession={() => setNewDialog(true)}
@@ -291,6 +309,23 @@ export function Workspace({ username, onLogout }: Props) {
             onPrefs={setPrefs}
             onBack={() => setView('chat')}
             onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            onLogout={onLogout}
+            username={username}
+            onOpenSkills={() => {
+              setView('skills')
+              setSidebarOpen(false)
+            }}
+          />
+        ) : view === 'skills' ? (
+          <SkillsAgentsPage
+            onBack={() => setView('chat')}
+            onOpenSidebar={() => setSidebarOpen((v) => !v)}
+            onGenerateChat={(prompt) => startGenerateChat(prompt)}
+            username={username}
+            onOpenProfile={() => {
+              setView('profile')
+              setSidebarOpen(false)
+            }}
             onLogout={onLogout}
           />
         ) : (
@@ -311,6 +346,16 @@ export function Workspace({ username, onLogout }: Props) {
             onStop={() => chats.stop(viewKey)}
             prefs={prefs}
             onPrefs={setPrefs}
+            username={username}
+            onOpenProfile={() => {
+              setView('profile')
+              setSidebarOpen(false)
+            }}
+            onOpenSkills={() => {
+              setView('skills')
+              setSidebarOpen(false)
+            }}
+            onLogout={onLogout}
           />
         )}
       </div>

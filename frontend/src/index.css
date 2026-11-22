@@ -83,6 +83,13 @@ html.ios-pwa.kb-open .app-shell {
   max-height: var(--app-height);
 }
 
+/* Panel Terminal/Browser/Changes: shell iOS PWA diperpanjang ke bawah layar (-mb-5), jadi isi panel
+   diberi padding bawah yang sama agar baris/tombol terakhir tidak kepotong. Saat keyboard terbuka
+   shell sudah pas, tanpa padding. */
+html.ios-pwa:not(.kb-open) .ios-tool-pad {
+  padding-bottom: calc(-1 * var(--ios-pwa-mb) + var(--safe-b));
+}
+
 html.ios-pwa aside.fixed {
   padding-top: var(--ios-pwa-pt);
 }

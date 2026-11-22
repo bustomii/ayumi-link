@@ -167,6 +167,7 @@ func (m *Manager) CreateTab(ctx context.Context, chatID, title, rawURL string) (
 	if len(m.pages) == 0 && m.cdp != nil && m.target != "" {
 		cdp, targetID = m.cdp, m.target
 		_, _ = cdp.call(cctx, "Network.enable", nil)
+		m.hardenPage(cctx, cdp)
 		if rawURL != "" {
 			_, _ = cdp.call(cctx, "Page.navigate", map[string]any{"url": rawURL})
 		}
@@ -188,6 +189,7 @@ func (m *Manager) CreateTab(ctx context.Context, chatID, title, rawURL string) (
 		cdp = newCDP(ws)
 		_, _ = cdp.call(cctx, "Page.enable", nil)
 		_, _ = cdp.call(cctx, "Network.enable", nil)
+		m.hardenPage(cctx, cdp)
 		m.restoreCookiesTo(cctx, cdp)
 		_, _ = cdp.call(cctx, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": m.w, "height": m.h, "deviceScaleFactor": 1, "mobile": false,
@@ -312,6 +314,7 @@ func (m *Manager) ActivateTab(ctx context.Context, chatID, tabID string) (TabInf
 	if len(m.pages) == 0 && m.cdp != nil && m.target != "" {
 		cdp, targetID = m.cdp, m.target
 		_, _ = cdp.call(cctx, "Network.enable", nil)
+		m.hardenPage(cctx, cdp)
 		if rawURL != "" {
 			_, _ = cdp.call(cctx, "Page.navigate", map[string]any{"url": rawURL})
 		}
@@ -332,6 +335,7 @@ func (m *Manager) ActivateTab(ctx context.Context, chatID, tabID string) (TabInf
 		targetID = id
 		_, _ = cdp.call(cctx, "Page.enable", nil)
 		_, _ = cdp.call(cctx, "Network.enable", nil)
+		m.hardenPage(cctx, cdp)
 		m.restoreCookiesTo(cctx, cdp)
 		_, _ = cdp.call(cctx, "Emulation.setDeviceMetricsOverride", map[string]any{
 			"width": m.w, "height": m.h, "deviceScaleFactor": 1, "mobile": false,

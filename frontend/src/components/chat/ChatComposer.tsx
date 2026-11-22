@@ -1,5 +1,7 @@
-import { Folder, Paperclip, Send, Square, X } from 'lucide-react'
+import { Bot, Folder, Paperclip, Send, Square, Wrench, X } from 'lucide-react'
+// Bot/Wrench hanya untuk autocomplete mention @/#
 import { useEffect, useRef, useState, type ClipboardEvent } from 'react'
+import { fetchAgents, fetchSkills, type Agent, type Skill } from '@/api/agentsSkills'
 import { fetchDir } from '@/api/sessions'
 import { AttachmentChips } from '@/components/chat/AttachmentChips'
 import { SettingsMenu } from '@/components/chat/SettingsMenu'
@@ -23,7 +25,20 @@ type Props = {
   onStop: () => void
 }
 
-export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeholder, cwd, attach, accept, onSend, onStop }: Props) {
+type MentionKind = 'agent' | 'skill' | null
+
+export function ChatComposer({
+  sending,
+  disabled = false,
+  prefs,
+  onPrefs,
+  placeholder,
+  cwd,
+  attach,
+  accept,
+  onSend,
+  onStop,
+}: Props) {
   const [text, setText] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -31,6 +46,28 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
   const [folders, setFolders] = useState<{ name: string; path: string }[]>([])
   const [dirs, setDirs] = useState<{ name: string; path: string }[]>([])
   const [dirsFor, setDirsFor] = useState('')
+  const [agents, setAgents] = useState<Agent[]>([])
+  const [skills, setSkills] = useState<Skill[]>([])
+
+  useEffect(() => {
+    let off = false
+    Promise.all([fetchAgents(), fetchSkills()])
+      .then(([a, s]) => {
+        if (!off) {
+          setAgents(Array.isArray(a) ? a : [])
+          setSkills(Array.isArray(s) ? s : [])
+        }
+      })
+      .catch(() => {
+        if (!off) {
+          setAgents([])
+          setSkills([])
+        }
+      })
+    return () => {
+      off = true
+    }
+  }, [])
 
   // Token "/…" di akhir teks (diawali spasi / awal baris) memicu daftar folder.
   const m = /(?:^|\s)(\/[^\s]*)$/.exec(text)
@@ -39,6 +76,37 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
   const filter = (parts.pop() ?? '').toLowerCase()
   const baseDir = cwd ? [cwd.replace(/\/$/, ''), ...parts.filter(Boolean)].join('/') : ''
   const picking = token !== null && Boolean(cwd) && !locked
+
+  // @agent / #skill di akhir
+  const mentionMatch = /(?:^|[\s([{])([@#])([a-zA-Z0-9._-]*)$/.exec(text)
+  const mentionKind: MentionKind =
+    !locked && mentionMatch ? (mentionMatch[1] === '@' ? 'agent' : 'skill') : null
+  const mentionFilter = (mentionMatch?.[2] ?? '').toLowerCase()
+
+  const agentList = Array.isArray(agents) ? agents : []
+  const skillList = Array.isArray(skills) ? skills : []
+  const agentHits =
+    mentionKind === 'agent'
+      ? agentList
+          .filter(
+            (a) =>
+              a.slug.toLowerCase().includes(mentionFilter) ||
+              a.name.toLowerCase().includes(mentionFilter) ||
+              (a.label ?? '').toLowerCase().includes(mentionFilter),
+          )
+          .slice(0, 8)
+      : []
+  const skillHits =
+    mentionKind === 'skill'
+      ? skillList
+          .filter(
+            (s) =>
+              s.slug.toLowerCase().includes(mentionFilter) ||
+              s.name.toLowerCase().includes(mentionFilter) ||
+              (s.label ?? '').toLowerCase().includes(mentionFilter),
+          )
+          .slice(0, 8)
+      : []
 
   useEffect(() => {
     if (!picking || !baseDir || baseDir === dirsFor) return
@@ -59,11 +127,18 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
     }
   }, [picking, baseDir, dirsFor])
 
-  const matches = picking && dirsFor === baseDir ? dirs.filter((d) => d.name.toLowerCase().includes(filter)).slice(0, 8) : []
+  const dirList = Array.isArray(dirs) ? dirs : []
+  const matches =
+    picking && dirsFor === baseDir ? dirList.filter((d) => d.name.toLowerCase().includes(filter)).slice(0, 8) : []
 
   function pickFolder(d: { name: string; path: string }) {
     setFolders((f) => (f.some((x) => x.path === d.path) ? f : [...f, d]))
     setText((t) => t.replace(/(^|\s)\/[^\s]*$/, '$1'))
+    ref.current?.focus()
+  }
+
+  function pickMention(prefix: '@' | '#', slug: string) {
+    setText((t) => t.replace(/[@#][a-zA-Z0-9._-]*$/, `${prefix}${slug} `))
     ref.current?.focus()
   }
 
@@ -85,7 +160,6 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
     setFolders([])
   }
 
-  // Gambar yang ditempel (mis. screenshot) dilampirkan; teks biasa diproses seperti biasa.
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const files = Array.from(e.clipboardData.files)
     if (files.length > 0) {
@@ -100,7 +174,7 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
         <ul
           role="listbox"
           aria-label="Pilih folder"
-          className="absolute bottom-full left-0 right-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
+          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
         >
           {matches.map((d) => (
             <li key={d.path}>
@@ -117,13 +191,57 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
           ))}
         </ul>
       )}
+      {agentHits.length > 0 && (
+        <ul
+          role="listbox"
+          aria-label="Pilih agent"
+          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
+        >
+          {agentHits.map((a) => (
+            <li key={a.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickMention('@', a.slug)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+              >
+                <Bot className="h-4 w-4 shrink-0 text-sky-400" />
+                <span className="min-w-0 flex-1 truncate">{a.name}</span>
+                <span className="text-[11px] text-muted-foreground">@{a.slug}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {skillHits.length > 0 && (
+        <ul
+          role="listbox"
+          aria-label="Pilih skill"
+          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
+        >
+          {skillHits.map((s) => (
+            <li key={s.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickMention('#', s.slug)}
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+              >
+                <Wrench className="h-4 w-4 shrink-0 text-amber-400" />
+                <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                <span className="text-[11px] text-muted-foreground">#{s.slug}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
       {folders.length > 0 && (
         <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Folder tujuan">
           {folders.map((f) => (
             <li
               key={f.path}
               title={f.path}
-              className="flex max-w-full items-center gap-1 rounded-full border border-border bg-card/80 py-1 pl-2 pr-1 text-xs"
+              className="flex max-w-full items-center gap-1 rounded-full border border-border bg-card/80 py-1 pr-1 pl-2 text-xs"
             >
               <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400" />
               <span className="truncate">{f.name}</span>
@@ -149,7 +267,7 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
           accept={accept}
           onChange={(e) => {
             attach.add(Array.from(e.target.files ?? []))
-            e.target.value = '' // izinkan memilih file yang sama lagi
+            e.target.value = ''
           }}
         />
         <Button
@@ -169,7 +287,7 @@ export function ChatComposer({ sending, disabled = false, prefs, onPrefs, placeh
           value={text}
           rows={1}
           disabled={locked}
-          placeholder={placeholder ?? 'Tulis pesan ke Claude…'}
+          placeholder={placeholder ?? 'Tulis pesan… @agent #skill /folder'}
           onChange={(e) => setText(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {

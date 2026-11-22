@@ -2,6 +2,7 @@ import { AlertTriangle, ArrowDown, FileDiff, Globe, Menu, FolderInput, MessageSq
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from 'react'
 import type { Message, Session } from '@/api/sessions'
 import type { Attachment, ContextUsage } from '@/api/types'
+import { AccountMenu } from '@/components/AccountMenu'
 import { ChatBubble } from '@/components/chat/ChatBubble'
 import { ChatComposer } from '@/components/chat/ChatComposer'
 import { ChatHeaderSkeleton, ChatSkeleton } from '@/components/chat/ChatSkeleton'
@@ -39,6 +40,10 @@ type Props = {
   onStop?: () => void
   prefs: Prefs
   onPrefs: (p: Prefs) => void
+  username: string
+  onOpenProfile: () => void
+  onOpenSkills: () => void
+  onLogout: () => void
 }
 
 export function ChatPanel({
@@ -58,6 +63,10 @@ export function ChatPanel({
   onStop,
   prefs,
   onPrefs,
+  username,
+  onOpenProfile,
+  onOpenSkills,
+  onLogout,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -179,7 +188,13 @@ export function ChatPanel({
           <Button variant="ghost" size="icon" onClick={onOpenSidebar} aria-label="Buka sessions" title="Sessions">
             <Menu className="h-5 w-5" />
           </Button>
-          <span className="text-sm font-medium">Ayumi Link</span>
+          <span className="min-w-0 flex-1 text-sm font-medium">Ayumi Link</span>
+          <AccountMenu
+            username={username}
+            onOpenProfile={onOpenProfile}
+            onOpenSkills={onOpenSkills}
+            onLogout={onLogout}
+          />
         </header>
         <div className="flex flex-1 items-center justify-center bg-[radial-gradient(ellipse_at_top,_#1a1d27_0%,_#0c0d10_55%)] p-4">
           <div className="max-w-sm rounded-2xl border border-border/60 bg-card/70 px-6 py-8 text-center backdrop-blur">
@@ -247,8 +262,18 @@ export function ChatPanel({
               {context && <ContextMeter usage={context} />}
             </div>
           ) : (
-            <ChatHeaderSkeleton />
+            <div className="min-w-0 flex-1">
+              <ChatHeaderSkeleton />
+            </div>
           )}
+          <div className="mt-0.5 shrink-0">
+            <AccountMenu
+              username={username}
+              onOpenProfile={onOpenProfile}
+              onOpenSkills={onOpenSkills}
+              onLogout={onLogout}
+            />
+          </div>
         </div>
         {canTools && (
           <nav className="w-full border-t border-border/40" aria-label="Panel session">

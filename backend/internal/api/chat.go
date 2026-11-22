@@ -26,14 +26,25 @@ func (s *Server) chat(c *fiber.Ctx) error {
 		Model          string   `json:"model"`
 		Effort         string   `json:"effort"`
 		Attachments    []string `json:"attachments"`
+		Agents         []string `json:"agents"` // slug/id/nama @agent
+		Skills         []string `json:"skills"` // slug/id/nama #skill
 	}
 	if err := c.BodyParser(&b); err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, "json tidak valid")
 	}
 
+	msg := b.Message
+	agentRefs, skillRefs := extractMentionRefs(b.Message, b.Agents, b.Skills)
+	if len(agentRefs) > 0 || len(skillRefs) > 0 {
+		ags, sks := s.Store.ResolveMentions(agentRefs, skillRefs)
+		if prefix := BuildAgentsSkillsPrompt(ags, sks); prefix != "" {
+			msg = prefix + msg
+		}
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	events, err := s.Runner.Start(ctx, claude.ChatOptions{
-		SessionID: b.SessionID, Cwd: b.Cwd, Message: b.Message,
+		SessionID: b.SessionID, Cwd: b.Cwd, Message: msg,
 		PermissionMode: b.PermissionMode, Model: b.Model, Effort: b.Effort, Attachments: b.Attachments,
 	})
 	if err != nil {

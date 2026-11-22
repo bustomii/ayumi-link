@@ -119,8 +119,24 @@ export function TerminalPanel({ sessionId }: Props) {
     const ro = new ResizeObserver(onResize)
     ro.observe(host)
     window.addEventListener('resize', onResize)
+    // iOS: keyboard muncul/hilang mengubah visualViewport; hitung ulang kolom/baris setelah layout
+    // selesai bergeser, lalu pastikan baris terakhir (prompt) terlihat.
+    const vv = window.visualViewport
+    let timers: number[] = []
+    const refit = () => {
+      timers.forEach((t) => window.clearTimeout(t))
+      timers = [60, 250, 600].map((ms) =>
+        window.setTimeout(() => {
+          onResize()
+          term.scrollToBottom()
+        }, ms),
+      )
+    }
+    vv?.addEventListener('resize', refit)
 
     return () => {
+      timers.forEach((t) => window.clearTimeout(t))
+      vv?.removeEventListener('resize', refit)
       sub.dispose()
       ro.disconnect()
       window.removeEventListener('resize', onResize)
@@ -169,7 +185,7 @@ export function TerminalPanel({ sessionId }: Props) {
   const cwd = tabs.find((t) => t.id === activeId)?.cwd
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e]">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#0a0b0e] ios-tool-pad">
       <div className="flex shrink-0 items-center gap-2 border-b border-border/50 px-3 py-2">
         <Terminal className="h-4 w-4 text-emerald-400" />
         <p className="min-w-0 flex-1 truncate font-mono text-[11px] text-muted-foreground" title={cwd}>
@@ -186,7 +202,7 @@ export function TerminalPanel({ sessionId }: Props) {
         busy={busy || loading}
       />
       {error && <p className="shrink-0 px-3 py-1.5 text-xs text-red-400">{error}</p>}
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden p-2" />
+      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden px-2 pb-3 pt-2" />
     </div>
   )
 }

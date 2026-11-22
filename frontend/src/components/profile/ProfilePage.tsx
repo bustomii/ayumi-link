@@ -1,5 +1,6 @@
 import { ArrowLeft, KeyRound, LogOut, Menu, UserRound } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { AccountMenu } from '@/components/AccountMenu'
 import { ClaudeAuthSection } from '@/components/profile/ClaudeAuthSection'
 import { LoginSessionsSection } from '@/components/profile/LoginSessionsSection'
 import { ChangePasswordDialog } from '@/components/profile/ChangePasswordDialog'
@@ -21,6 +22,8 @@ type Props = {
   onBack: () => void
   onOpenSidebar: () => void
   onLogout: () => void
+  username: string
+  onOpenSkills: () => void
 }
 
 function ProfileSkeleton() {
@@ -47,7 +50,7 @@ function ProfileSkeleton() {
 }
 
 /** Halaman profil & keamanan: akun, 2FA, perangkat yang masuk, pengaturan chat, info server. */
-export function ProfilePage({ prefs, onPrefs, onBack, onOpenSidebar, onLogout }: Props) {
+export function ProfilePage({ prefs, onPrefs, onBack, onOpenSidebar, onLogout, username, onOpenSkills }: Props) {
   const { data, loading, error, reload } = useProfile()
   const errors = useErrorDialog()
   const [passwordDialog, setPasswordDialog] = useState(false)
@@ -68,10 +71,17 @@ export function ProfilePage({ prefs, onPrefs, onBack, onOpenSidebar, onLogout }:
           <h1 className="truncate text-sm font-semibold tracking-tight sm:text-base">Profil & keamanan</h1>
           <p className="truncate text-[11px] text-muted-foreground sm:text-xs">Akun, 2FA, dan perangkat yang masuk</p>
         </div>
-        <Button variant="outline" size="sm" onClick={onBack}>
+        <Button variant="outline" size="sm" className="shrink-0" onClick={onBack}>
           <ArrowLeft className="h-4 w-4" />
-          Kembali ke chat
+          <span className="hidden sm:inline">Kembali ke chat</span>
         </Button>
+        <AccountMenu
+          username={username}
+          onOpenProfile={() => {}}
+          onOpenSkills={onOpenSkills}
+          onLogout={onLogout}
+          profileActive
+        />
       </header>
 
       <ScrollArea className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-4 sm:px-5 sm:py-6">

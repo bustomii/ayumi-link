@@ -124,7 +124,16 @@ cmd_restart() {
     launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
     sleep 1
   fi
-  launchctl bootstrap "${DOMAIN}" "$PLIST"
+  # Kadang bootout menyisakan state; bootstrap gagal → coba enable + kickstart / install ulang.
+  if ! launchctl bootstrap "${DOMAIN}" "$PLIST" 2>/dev/null; then
+    launchctl bootout "${DOMAIN}/${LABEL}" 2>/dev/null || true
+    sleep 1
+    launchctl bootstrap "${DOMAIN}" "$PLIST" || {
+      echo "bootstrap gagal; coba: make service-uninstall && make service-install" >&2
+      exit 1
+    }
+  fi
+  launchctl enable "${DOMAIN}/${LABEL}" 2>/dev/null || true
   launchctl kickstart -k "${DOMAIN}/${LABEL}"
   echo "Restarted ${LABEL} → make build jalan lagi"
   echo "Logs: tail -f ${LOG_DIR}/stdout.log"
