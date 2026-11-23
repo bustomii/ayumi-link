@@ -34,6 +34,8 @@ type Agent struct {
 	Label       string   `json:"label,omitempty"`
 	Description string   `json:"description,omitempty"`
 	SkillIDs    []string `json:"skillIds"`
+	// Instructions: isi file agent (di bawah frontmatter); ikut disisipkan ke chat saat di-@mention.
+	Instructions string `json:"instructions,omitempty"`
 	// Source "disk" = diimpor dari file (~/.claude atau .claude/ proyek) yang dibuat/diubah/dihapus
 	// lewat chat Claude; SourcePath = file asalnya.
 	Source     string    `json:"source,omitempty"`

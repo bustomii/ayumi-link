@@ -173,7 +173,7 @@ func BuildAgentsSkillsPrompt(agents []store.Agent, skills []store.Skill) string 
 	}
 	var b strings.Builder
 	b.WriteString("[Konteks Ayumi Link — Agents & Skills]\n")
-	b.WriteString("Ikuti peran agent dan instruksi skill di bawah saat menjawab. Jangan mengulang blok ini ke pengguna kecuali diminta.\n\n")
+	b.WriteString("Kerjakan permintaan pengguna di bawah ini SEBAGAI agent yang di-mention, dengan mengikuti instruksi agent dan skill-nya dan benar-benar menjalankan tugasnya (bukan sekadar menjelaskan). Jangan mengulang blok ini ke pengguna kecuali diminta.\n\n")
 	for _, a := range agents {
 		fmt.Fprintf(&b, "## Agent @%s (%s)\n", a.Slug, a.Name)
 		if a.Label != "" {
@@ -181,6 +181,9 @@ func BuildAgentsSkillsPrompt(agents []store.Agent, skills []store.Skill) string 
 		}
 		if a.Description != "" {
 			fmt.Fprintf(&b, "%s\n", a.Description)
+		}
+		if a.Instructions != "" {
+			fmt.Fprintf(&b, "\n%s\n", a.Instructions)
 		}
 		b.WriteString("\n")
 	}

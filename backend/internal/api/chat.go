@@ -36,6 +36,7 @@ func (s *Server) chat(c *fiber.Ctx) error {
 	msg := b.Message
 	agentRefs, skillRefs := extractMentionRefs(b.Message, b.Agents, b.Skills)
 	if len(agentRefs) > 0 || len(skillRefs) > 0 {
+		s.syncDisk()
 		ags, sks := s.Store.ResolveMentions(agentRefs, skillRefs)
 		if prefix := BuildAgentsSkillsPrompt(ags, sks); prefix != "" {
 			msg = prefix + msg

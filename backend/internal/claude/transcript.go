@@ -122,7 +122,12 @@ func firstUserPrompt(jsonlPath string) string {
 
 var imageMetaRe = regexp.MustCompile(`(?is)\[Image:[^\]]*\]`)
 
+// ayumiContextRe: blok konteks Agents & Skills yang disisipkan Ayumi Link di depan pesan user.
+// Hanya untuk Claude; tidak ditampilkan di chat.
+var ayumiContextRe = regexp.MustCompile(`(?s)^\s*\[Konteks Ayumi Link[^\]]*\].*?\[/Konteks Ayumi Link\]\s*`)
+
 func cleanUserText(s string) string {
+	s = ayumiContextRe.ReplaceAllString(s, "")
 	s = imageMetaRe.ReplaceAllString(s, "📷 [gambar]")
 	// Fallback if path/brackets odd
 	if strings.Contains(strings.ToLower(s), "[image:") {
@@ -232,6 +237,9 @@ func LoadMessages(jsonlPath string) ([]Message, error) {
 		if role == "" {
 			role = typ
 		}
+		if isSyntheticStub(raw, msg) {
+			continue
+		}
 		content, tools, onlyTools, onlyToolResult := extractParts(msg["content"])
 		content = strings.TrimSpace(content)
 		var atts []Attachment
@@ -273,14 +281,19 @@ func LoadMessages(jsonlPath string) ([]Message, error) {
 			id = "msg-" + strconv.Itoa(len(msgs))
 		}
 
-		msgs = append(msgs, Message{
+		m := Message{
 			ID:          id,
 			Role:        role,
 			Content:     content,
 			Tools:       uniqueStrings(attached),
 			Timestamp:   ts,
 			Attachments: atts,
-		})
+		}
+		if role == "user" {
+			msgs = placeUserBeforeEarlyReplies(msgs, m)
+		} else {
+			msgs = append(msgs, m)
+		}
 	}
 	return msgs, sc.Err()
 }
@@ -336,4 +349,36 @@ func uniqueStrings(in []string) []string {
 		out = append(out, s)
 	}
 	return out
+}
+
+// isSyntheticStub mengenali balasan sintetis "No response requested." yang ditulis Claude Code
+// tepat sebelum pesan user saat session dilanjutkan. Itu bukan balasan nyata dan membuat balasan
+// tampil di atas pesan user. Pesan error API sintetis tetap ditampilkan.
+func isSyntheticStub(raw, msg map[string]any) bool {
+	if model, _ := msg["model"].(string); model != "<synthetic>" {
+		return false
+	}
+	if isErr, _ := raw["isApiErrorMessage"].(bool); isErr {
+		return false
+	}
+	text, _, _, _ := extractParts(msg["content"])
+	return strings.TrimSpace(text) == "No response requested."
+}
+
+// placeUserBeforeEarlyReplies memastikan balasan tidak pernah tampil di atas pesan user yang
+// dibalasnya. Balasan asli selalu lebih baru dari pesan user; bila ada balasan tepat di depan
+// dengan waktu lebih baru dari pesan user ini, urutannya terbalik di transcript,
+// sehingga pesan user disisipkan di depannya.
+func placeUserBeforeEarlyReplies(msgs []Message, user Message) []Message {
+	if user.Timestamp.IsZero() {
+		return append(msgs, user)
+	}
+	i := len(msgs)
+	for i > 0 && msgs[i-1].Role == "assistant" && !msgs[i-1].Timestamp.IsZero() && msgs[i-1].Timestamp.After(user.Timestamp) {
+		i--
+	}
+	msgs = append(msgs, Message{})
+	copy(msgs[i+1:], msgs[i:])
+	msgs[i] = user
+	return msgs
 }

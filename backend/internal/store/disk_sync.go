@@ -99,6 +99,7 @@ func (s *Store) SyncFromDisk(roots []string) bool {
 			desc = firstParagraph(body)
 		}
 		desc = clip(desc, maxDescLen)
+		instr := clip(body, maxBodyLen)
 		var ids []string
 		for _, ref := range splitList(fm["skills"]) {
 			if id, ok := skillIDBySlug[Slugify(ref)]; ok {
@@ -108,8 +109,8 @@ func (s *Store) SyncFromDisk(roots []string) bool {
 		ids = filterKnownSkills(f.Skills, ids)
 		if i, exists := byAgentPath[df.path]; exists {
 			cur := f.Agents[i]
-			if cur.Name != name || cur.Description != desc || !sameStrings(cur.SkillIDs, ids) {
-				cur.Name, cur.Description, cur.SkillIDs, cur.UpdatedAt = name, desc, ids, mod
+			if cur.Name != name || cur.Description != desc || cur.Instructions != instr || !sameStrings(cur.SkillIDs, ids) {
+				cur.Name, cur.Description, cur.Instructions, cur.SkillIDs, cur.UpdatedAt = name, desc, instr, ids, mod
 				f.Agents[i] = cur
 				changed = true
 			}
@@ -120,7 +121,7 @@ func (s *Store) SyncFromDisk(roots []string) bool {
 		}
 		now := time.Now()
 		f.Agents = append(f.Agents, Agent{
-			ID: newID(), Slug: slug, Name: name, Description: desc, SkillIDs: nonNil(ids),
+			ID: newID(), Slug: slug, Name: name, Description: desc, Instructions: instr, SkillIDs: nonNil(ids),
 			Source: "disk", SourcePath: df.path, CreatedAt: now, UpdatedAt: now,
 		})
 		agentSlugs[slug] = true
