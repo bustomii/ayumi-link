@@ -33,6 +33,18 @@ var uuidRe = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[
 // IsUUID memeriksa format id session.
 func IsUUID(s string) bool { return uuidRe.MatchString(s) }
 
+// Setiap chat dari Ayumi Link berjalan "bersih": tanpa atribusi AI di commit, PR, kode, atau komentar.
+// Berlaku hanya untuk yang ditulis pada giliran itu; kode lama tidak disentuh.
+const cleanOutputPrompt = `Aturan penulisan untuk sesi ini:
+- Jangan menambahkan atribusi atau watermark AI pada hal yang kamu tulis sekarang: tidak ada "Co-Authored-By" untuk Claude/Anthropic, "Generated with Claude Code", noreply@anthropic.com, atau komentar/header "dibuat oleh AI" di kode, dokumen, pesan commit, maupun deskripsi PR.
+- Commit memakai identitas git milik pengguna saja. Tulis pesan commit seperti commit manual biasa.
+- Komentar kode hanya menjelaskan alasan, bukan siapa penulisnya. Ikuti gaya kode yang sudah ada.
+- Aturan ini hanya untuk kode dan teks baru yang kamu tulis. Jangan mengubah atau membersihkan kode lama demi aturan ini.
+- Jangan menulis ulang riwayat git atau force push kecuali diminta jelas.`
+
+// cleanOutputSettings menonaktifkan atribusi bawaan Claude Code pada commit dan PR.
+const cleanOutputSettings = `{"attribution":{"commit":"","pr":""},"includeCoAuthoredBy":false}`
+
 // ---- opsi yang diizinkan ----
 
 var allowedModels = map[string]bool{
@@ -219,7 +231,8 @@ func (r *Runner) Start(ctx context.Context, o ChatOptions) (<-chan Event, error)
 	prompt := o.Message + attachmentFooter(atts, r.Uploads)
 
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
-		"--permission-mode", r.permission(o.PermissionMode)}
+		"--permission-mode", r.permission(o.PermissionMode),
+		"--append-system-prompt", cleanOutputPrompt, "--settings", cleanOutputSettings}
 	if allowedModels[o.Model] {
 		args = append(args, "--model", o.Model)
 	}
