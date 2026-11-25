@@ -2,6 +2,10 @@
 # Kelola launchd user agent: com.ayumi.link
 # Restart = kill proses + jalankan lagi scripts/native-service-run.sh → make build.
 set -eu
+# Linux memakai systemd; sisanya di bawah khusus launchd (macOS).
+if [ "$(uname -s)" = "Linux" ]; then
+  exec bash "$(dirname "$0")/native-service-systemd.sh" "$@"
+fi
 ROOT=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 LABEL="com.ayumi.link"
 UID_NUM=$(id -u)

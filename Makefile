@@ -17,12 +17,12 @@ dev: ## Native: API :8081 + Vite HMR :5173 (satu perintah)
 	@chmod +x scripts/native-dev.sh
 	@sh scripts/native-dev.sh
 
-# LaunchAgent: setiap restart = make build lagi (lihat skill ayumi-link-native-service)
-service-install: ## Native: pasang LaunchAgent + start (com.ayumi.link)
-	@chmod +x scripts/native-service.sh scripts/native-service-run.sh scripts/native-build.sh
+# Service (macOS: LaunchAgent, Linux: systemd): setiap restart = make build lagi (lihat skill ayumi-link-native-service)
+service-install: ## Native: pasang service + start (macOS/Linux)
+	@chmod +x scripts/native-service*.sh scripts/native-build.sh
 	@sh scripts/native-service.sh install
 
-service-uninstall: ## Native: hapus LaunchAgent
+service-uninstall: ## Native: hapus service
 	@sh scripts/native-service.sh uninstall
 
 service-start: ## Native: start service
@@ -32,13 +32,13 @@ service-stop: ## Native: stop service
 	@sh scripts/native-service.sh stop
 
 service-restart: ## Native: restart → make build jalan lagi (redeploy)
-	@chmod +x scripts/native-service.sh scripts/native-service-run.sh scripts/native-build.sh
+	@chmod +x scripts/native-service*.sh scripts/native-build.sh
 	@sh scripts/native-service.sh restart
 
-service-status: ## Native: status LaunchAgent
+service-status: ## Native: status service
 	@sh scripts/native-service.sh status
 
-service-logs: ## Native: tail log LaunchAgent
+service-logs: ## Native: tail log service
 	@sh scripts/native-service.sh logs
 
 # ---- Docker ----
