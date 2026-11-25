@@ -1,6 +1,7 @@
 import { ChevronDown, FileDiff, Loader2, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { fetchSessionChangeDiff, fetchSessionChanges } from '@/api/sessions'
+import { GitChanges } from '@/components/session/GitChanges'
 import type { ChangeDiff, FileChange } from '@/api/types'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -86,7 +87,7 @@ function DiffView({ diff, loading }: { diff: ChangeDiff | null; loading: boolean
   )
 }
 
-export function ChangesPanel({ sessionId }: Props) {
+function SessionEdits({ sessionId }: Props) {
   const [list, setList] = useState<FileChange[]>([])
   const [active, setActive] = useState<string>('')
   const [diff, setDiff] = useState<ChangeDiff | null>(null)
@@ -260,6 +261,44 @@ export function ChangesPanel({ sessionId }: Props) {
           <DiffView diff={diff} loading={diffLoading} />
         </ScrollArea>
       </div>
+    </div>
+  )
+}
+
+/** Tab Changes: perubahan belum ter-commit (git) dan riwayat edit file oleh session ini. */
+export function ChangesPanel({ sessionId }: Props) {
+  const [view, setView] = useState<'git' | 'edits'>('git')
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex shrink-0 gap-1 border-b border-border/60 px-3 py-1.5" role="tablist">
+        {(
+          [
+            ['git', 'Belum di-commit'],
+            ['edits', 'Edit session'],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={view === id}
+            onClick={() => setView(id)}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-medium',
+              view === id ? 'bg-accent/20 text-foreground' : 'text-muted-foreground hover:bg-white/5',
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {view === 'git' ? (
+        <div className="ios-tool-pad flex min-h-0 flex-1 flex-col">
+          <GitChanges sessionId={sessionId} />
+        </div>
+      ) : (
+        <SessionEdits sessionId={sessionId} />
+      )}
     </div>
   )
 }
