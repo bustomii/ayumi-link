@@ -12,6 +12,7 @@ import { ChangesPanel } from '@/components/session/ChangesPanel'
 import { TerminalPanel } from '@/components/session/TerminalPanel'
 import { useAttachments } from '@/hooks/useAttachments'
 import { useErrorDialog } from '@/hooks/useErrorDialog'
+import { useMentionIndex } from '@/lib/mention-index'
 import { useUploadLimits } from '@/hooks/useUploadLimits'
 import { acceptAttr, allowedSummary, formatSize } from '@/lib/attachments'
 import type { Prefs } from '@/lib/chat-options'
@@ -69,6 +70,7 @@ export function ChatPanel({
   onLogout,
 }: Props) {
   const scrollRef = useRef<HTMLDivElement>(null)
+  const mentionIndex = useMentionIndex()
   const bottomRef = useRef<HTMLDivElement>(null)
   const stickBottomRef = useRef(true)
   const prevScrollHeightRef = useRef(0)
@@ -369,7 +371,7 @@ export function ChatPanel({
               )}
 
               {messages.map((m, i) => (
-                <ChatBubble key={m.id || `${m.role}-${m.timestamp}-${i}`} message={m} />
+                <ChatBubble key={m.id || `${m.role}-${m.timestamp}-${i}`} message={m} known={mentionIndex.known} />
               ))}
               <div ref={bottomRef} />
             </div>

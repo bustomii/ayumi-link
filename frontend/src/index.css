@@ -256,3 +256,10 @@ html {
     padding: 0.55rem 0.7rem;
   }
 }
+
+/* Editor pesan (contenteditable): placeholder saat kosong. */
+.chat-editor:empty::before {
+  content: attr(data-placeholder);
+  color: var(--color-muted-foreground);
+  pointer-events: none;
+}

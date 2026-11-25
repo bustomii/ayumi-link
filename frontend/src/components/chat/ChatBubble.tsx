@@ -1,7 +1,9 @@
 import { Bot, User, Wrench } from 'lucide-react'
 import type { Message } from '@/api/sessions'
+import { ChatTag } from '@/components/chat/ChatTag'
 import { MarkdownContent } from '@/components/chat/MarkdownContent'
 import { MessageAttachments } from '@/components/chat/MessageAttachments'
+import { emptyKnown, segmentMessage, type Known } from '@/lib/chat-tags'
 import { cn } from '@/lib/utils'
 
 function formatTime(iso: string) {
@@ -30,13 +32,16 @@ function looksLikeMarkdown(content: string) {
   )
 }
 
-export function ChatBubble({ message }: { message: Message }) {
+export function ChatBubble({ message, known = emptyKnown }: { message: Message; known?: Known }) {
   const isUser = message.role === 'user'
   if (isNoiseContent(message.content)) return null
 
   const attachments = message.attachments ?? []
-  const hasText = message.content.trim() !== ''
-  const useMarkdown = !isUser || looksLikeMarkdown(message.content)
+  const segments = isUser ? segmentMessage(message.content, known) : null
+  const hasInline = !!segments && segments.some((x) => x.type !== 'text')
+  const body = message.content
+  const hasText = body.trim() !== ''
+  const useMarkdown = !isUser || looksLikeMarkdown(body)
 
   return (
     <div
@@ -104,11 +109,23 @@ export function ChatBubble({ message }: { message: Message }) {
                 : 'w-full rounded-tl-md border border-border/70 bg-card text-foreground',
             )}
           >
-            {useMarkdown ? (
-              <MarkdownContent content={message.content} />
+            {hasInline && segments ? (
+              <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+                {segments.map((seg, i) =>
+                  seg.type === 'text' ? (
+                    <span key={i}>{seg.text}</span>
+                  ) : seg.type === 'folder' ? (
+                    <ChatTag key={i} kind="folder" label={seg.name} title={seg.path} />
+                  ) : (
+                    <ChatTag key={i} kind={seg.type} label={seg.slug} />
+                  ),
+                )}
+              </p>
+            ) : useMarkdown ? (
+              <MarkdownContent content={body} />
             ) : (
               <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                {message.content}
+                {body}
               </p>
             )}
           </div>

@@ -34,11 +34,12 @@ func extractMentionRefs(msg string, agents, skills []string) (outA, outS []strin
 	for _, v := range skills {
 		add(seenS, &outS, v)
 	}
+	// Tanda baca di ujung kalimat ("@agent.") bukan bagian dari slug.
 	for _, m := range reAtAgent.FindAllStringSubmatch(msg, -1) {
-		add(seenA, &outA, m[1])
+		add(seenA, &outA, strings.TrimRight(m[1], "._-"))
 	}
 	for _, m := range reHashSk.FindAllStringSubmatch(msg, -1) {
-		add(seenS, &outS, m[1])
+		add(seenS, &outS, strings.TrimRight(m[1], "._-"))
 	}
 	return outA, outS
 }

@@ -1,13 +1,14 @@
-import { Bot, Folder, Paperclip, Send, Square, Wrench, X } from 'lucide-react'
-// Bot/Wrench hanya untuk autocomplete mention @/#
-import { useEffect, useRef, useState, type ClipboardEvent } from 'react'
-import { fetchAgents, fetchSkills, type Agent, type Skill } from '@/api/agentsSkills'
+import { Bot, Folder, Paperclip, Send, Square, Wrench } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type MouseEvent } from 'react'
 import { fetchDir } from '@/api/sessions'
 import { AttachmentChips } from '@/components/chat/AttachmentChips'
+import { tagPrefix, tagStyles, type TagKind } from '@/components/chat/ChatTag'
 import { SettingsMenu } from '@/components/chat/SettingsMenu'
 import { Button } from '@/components/ui/button'
 import type { useAttachments } from '@/hooks/useAttachments'
 import type { Prefs } from '@/lib/chat-options'
+import { tokenFor } from '@/lib/chat-tags'
+import { useMentionIndex } from '@/lib/mention-index'
 
 type Props = {
   sending: boolean
@@ -25,7 +26,63 @@ type Props = {
   onStop: () => void
 }
 
-type MentionKind = 'agent' | 'skill' | null
+type Trigger = { prefix: '@' | '#' | '/'; raw: string; node: Text; start: number; end: number }
+type Dir = { name: string; path: string }
+
+/** Teks yang dikirim: teks biasa + token untuk tiap badge (@agent, #skill, [Folder: path]). */
+function serialize(root: HTMLElement): string {
+  let out = ''
+  let afterChip = false
+  const addText = (t: string) => {
+    if (!t) return
+    if (afterChip && !/^[\s.,;:!?)\]}]/.test(t)) out += ' '
+    afterChip = false
+    out += t
+  }
+  const walk = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) {
+      addText((n.textContent ?? '').replace(/​/g, ''))
+      return
+    }
+    if (!(n instanceof HTMLElement)) return
+    const kind = n.dataset.kind as TagKind | undefined
+    if (kind) {
+      if (out && !/[\s([{]$/.test(out)) out += ' '
+      out += tokenFor(kind, n.dataset.value ?? '')
+      afterChip = true
+      return
+    }
+    if (n.tagName === 'BR') {
+      addText('\n')
+      return
+    }
+    const block = n.tagName === 'DIV' || n.tagName === 'P'
+    if (block && out && !out.endsWith('\n')) out += '\n'
+    n.childNodes.forEach(walk)
+  }
+  root.childNodes.forEach(walk)
+  return out
+}
+
+function buildChip(kind: TagKind, value: string, label: string): HTMLElement {
+  const el = document.createElement('span')
+  el.contentEditable = 'false'
+  el.dataset.kind = kind
+  el.dataset.value = value
+  el.title = kind === 'folder' ? value : `${tagPrefix[kind]}${label}`
+  el.className = `mx-0.5 inline-flex max-w-full items-center rounded-full py-0.5 pr-1 pl-2 align-baseline text-xs font-medium ${tagStyles[kind]}`
+  const text = document.createElement('span')
+  text.className = 'truncate'
+  text.textContent = `${tagPrefix[kind]}${label}`
+  const x = document.createElement('span')
+  x.dataset.remove = '1'
+  x.setAttribute('role', 'button')
+  x.setAttribute('aria-label', `Hapus ${tagPrefix[kind]}${label}`)
+  x.className = 'ml-1 cursor-pointer rounded-full px-1 leading-none hover:bg-black/15'
+  x.textContent = '×'
+  el.append(text, x)
+  return el
+}
 
 export function ChatComposer({
   sending,
@@ -39,82 +96,64 @@ export function ChatComposer({
   onSend,
   onStop,
 }: Props) {
-  const [text, setText] = useState('')
-  const ref = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const locked = sending || disabled
-  const [folders, setFolders] = useState<{ name: string; path: string }[]>([])
-  const [dirs, setDirs] = useState<{ name: string; path: string }[]>([])
+  const { agents, skills } = useMentionIndex()
+  const [plain, setPlain] = useState('')
+  const [trigger, setTrigger] = useState<Trigger | null>(null)
+  const [dirs, setDirs] = useState<Dir[]>([])
   const [dirsFor, setDirsFor] = useState('')
-  const [agents, setAgents] = useState<Agent[]>([])
-  const [skills, setSkills] = useState<Skill[]>([])
 
-  useEffect(() => {
-    let off = false
-    Promise.all([fetchAgents(), fetchSkills()])
-      .then(([a, s]) => {
-        if (!off) {
-          setAgents(Array.isArray(a) ? a : [])
-          setSkills(Array.isArray(s) ? s : [])
-        }
-      })
-      .catch(() => {
-        if (!off) {
-          setAgents([])
-          setSkills([])
-        }
-      })
-    return () => {
-      off = true
-    }
+  const sync = useCallback(() => {
+    const ed = editorRef.current
+    if (!ed) return
+    const value = serialize(ed)
+    // Browser meninggalkan <br> sisa saat kosong; bersihkan agar placeholder muncul lagi.
+    if (value.trim() === '' && !ed.querySelector('[data-kind]') && ed.innerHTML !== '') ed.innerHTML = ''
+    setPlain(value)
   }, [])
 
-  // Token "/…" di akhir teks (diawali spasi / awal baris) memicu daftar folder.
-  const m = /(?:^|\s)(\/[^\s]*)$/.exec(text)
-  const token = m ? m[1] : null
-  const parts = token ? token.slice(1).split('/') : []
-  const filter = (parts.pop() ?? '').toLowerCase()
+  const detectTrigger = useCallback(() => {
+    const ed = editorRef.current
+    const sel = window.getSelection()
+    if (!ed || !sel || !sel.isCollapsed || !sel.anchorNode || !ed.contains(sel.anchorNode)) {
+      setTrigger(null)
+      return
+    }
+    const node = sel.anchorNode
+    if (node.nodeType !== Node.TEXT_NODE) {
+      setTrigger(null)
+      return
+    }
+    const before = (node.textContent ?? '').slice(0, sel.anchorOffset)
+    const m = /(?:^|[\s([{])([@#/])([^\s]*)$/.exec(before)
+    if (!m || (m[1] !== '/' && !/^[\w.-]*$/.test(m[2]))) {
+      setTrigger(null)
+      return
+    }
+    setTrigger({
+      prefix: m[1] as Trigger['prefix'],
+      raw: m[2],
+      node: node as Text,
+      start: before.length - 1 - m[2].length,
+      end: before.length,
+    })
+  }, [])
+
+  // Daftar folder untuk token "/…".
+  const parts = trigger?.prefix === '/' ? trigger.raw.split('/') : []
+  const folderFilter = (parts.pop() ?? '').toLowerCase()
   const baseDir = cwd ? [cwd.replace(/\/$/, ''), ...parts.filter(Boolean)].join('/') : ''
-  const picking = token !== null && Boolean(cwd) && !locked
-
-  // @agent / #skill di akhir
-  const mentionMatch = /(?:^|[\s([{])([@#])([a-zA-Z0-9._-]*)$/.exec(text)
-  const mentionKind: MentionKind =
-    !locked && mentionMatch ? (mentionMatch[1] === '@' ? 'agent' : 'skill') : null
-  const mentionFilter = (mentionMatch?.[2] ?? '').toLowerCase()
-
-  const agentList = Array.isArray(agents) ? agents : []
-  const skillList = Array.isArray(skills) ? skills : []
-  const agentHits =
-    mentionKind === 'agent'
-      ? agentList
-          .filter(
-            (a) =>
-              a.slug.toLowerCase().includes(mentionFilter) ||
-              a.name.toLowerCase().includes(mentionFilter) ||
-              (a.label ?? '').toLowerCase().includes(mentionFilter),
-          )
-          .slice(0, 8)
-      : []
-  const skillHits =
-    mentionKind === 'skill'
-      ? skillList
-          .filter(
-            (s) =>
-              s.slug.toLowerCase().includes(mentionFilter) ||
-              s.name.toLowerCase().includes(mentionFilter) ||
-              (s.label ?? '').toLowerCase().includes(mentionFilter),
-          )
-          .slice(0, 8)
-      : []
+  const pickingFolder = trigger?.prefix === '/' && Boolean(cwd) && !locked
 
   useEffect(() => {
-    if (!picking || !baseDir || baseDir === dirsFor) return
+    if (!pickingFolder || !baseDir || baseDir === dirsFor) return
     let alive = true
     fetchDir(baseDir)
       .then((d) => {
         if (!alive) return
-        setDirs(d.dirs)
+        setDirs(Array.isArray(d.dirs) ? d.dirs : [])
         setDirsFor(baseDir)
       })
       .catch(() => {
@@ -125,66 +164,108 @@ export function ChatComposer({
     return () => {
       alive = false
     }
-  }, [picking, baseDir, dirsFor])
+  }, [pickingFolder, baseDir, dirsFor])
 
-  const dirList = Array.isArray(dirs) ? dirs : []
-  const matches =
-    picking && dirsFor === baseDir ? dirList.filter((d) => d.name.toLowerCase().includes(filter)).slice(0, 8) : []
+  const mentionFilter = trigger && trigger.prefix !== '/' ? trigger.raw.toLowerCase() : ''
+  const matchText = (slug: string, name: string, label?: string) =>
+    slug.toLowerCase().includes(mentionFilter) ||
+    name.toLowerCase().includes(mentionFilter) ||
+    (label ?? '').toLowerCase().includes(mentionFilter)
+  const agentHits =
+    !locked && trigger?.prefix === '@' ? agents.filter((a) => matchText(a.slug, a.name, a.label)).slice(0, 8) : []
+  const skillHits =
+    !locked && trigger?.prefix === '#' ? skills.filter((s) => matchText(s.slug, s.name, s.label)).slice(0, 8) : []
+  const folderHits =
+    pickingFolder && dirsFor === baseDir ? dirs.filter((d) => d.name.toLowerCase().includes(folderFilter)).slice(0, 8) : []
 
-  function pickFolder(d: { name: string; path: string }) {
-    setFolders((f) => (f.some((x) => x.path === d.path) ? f : [...f, d]))
-    setText((t) => t.replace(/(^|\s)\/[^\s]*$/, '$1'))
-    ref.current?.focus()
+  function insertChip(kind: TagKind, value: string, label: string) {
+    const t = trigger
+    const ed = editorRef.current
+    if (!t || !ed) return
+    const range = document.createRange()
+    range.setStart(t.node, t.start)
+    range.setEnd(t.node, t.end)
+    range.deleteContents()
+    const chip = buildChip(kind, value, label)
+    range.insertNode(chip)
+    const space = document.createTextNode(' ')
+    chip.after(space)
+    const caret = document.createRange()
+    caret.setStart(space, 1)
+    caret.collapse(true)
+    const sel = window.getSelection()
+    sel?.removeAllRanges()
+    sel?.addRange(caret)
+    setTrigger(null)
+    sync()
+    ed.focus()
   }
 
-  function pickMention(prefix: '@' | '#', slug: string) {
-    setText((t) => t.replace(/[@#][a-zA-Z0-9._-]*$/, `${prefix}${slug} `))
-    ref.current?.focus()
-  }
-
-  useEffect(() => {
-    const el = ref.current
-    if (!el) return
-    el.style.height = 'auto'
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-  }, [text])
-
-  const hasContent = text.trim() !== '' || folders.length > 0 || attach.attachments.length > 0
+  const hasContent = plain.trim() !== '' || attach.attachments.length > 0
   const canSend = hasContent && !attach.uploading && !locked
 
   function submit() {
-    if (!canSend) return
-    const prefix = folders.map((f) => `[Folder: ${f.path}]`).join('\n')
-    onSend([prefix, text.trim()].filter(Boolean).join('\n'))
-    setText('')
-    setFolders([])
+    const ed = editorRef.current
+    if (!canSend || !ed) return
+    onSend(serialize(ed).trim())
+    ed.innerHTML = ''
+    setPlain('')
+    setTrigger(null)
   }
 
-  function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+  function onPaste(e: ClipboardEvent<HTMLDivElement>) {
     const files = Array.from(e.clipboardData.files)
     if (files.length > 0) {
       e.preventDefault()
       attach.add(files)
+      return
+    }
+    // Tempel sebagai teks biasa (tanpa format dari sumber lain).
+    e.preventDefault()
+    document.execCommand('insertText', false, e.clipboardData.getData('text/plain'))
+  }
+
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
+      e.preventDefault()
+      if (e.shiftKey) document.execCommand('insertText', false, '\n')
+      else submit()
     }
   }
 
+  function onEditorClick(e: MouseEvent<HTMLDivElement>) {
+    const x = (e.target as HTMLElement).closest('[data-remove]')
+    if (x?.parentElement) {
+      x.parentElement.remove()
+      sync()
+      setTrigger(null)
+    }
+  }
+
+  // Tinggi editor mengikuti isi; posisi caret menentukan daftar autocomplete.
+  useEffect(() => {
+    const onSel = () => detectTrigger()
+    document.addEventListener('selectionchange', onSel)
+    return () => document.removeEventListener('selectionchange', onSel)
+  }, [detectTrigger])
+
+  const listClass =
+    'absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur'
+  const itemClass = 'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5'
+
   return (
     <div className="relative mx-auto max-w-3xl">
-      {matches.length > 0 && (
-        <ul
-          role="listbox"
-          aria-label="Pilih folder"
-          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
-        >
-          {matches.map((d) => (
+      {folderHits.length > 0 && (
+        <ul role="listbox" aria-label="Pilih folder" className={listClass}>
+          {folderHits.map((d) => (
             <li key={d.path}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pickFolder(d)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+                onClick={() => insertChip('folder', d.path, d.name)}
+                className={itemClass}
               >
-                <Folder className="h-4 w-4 shrink-0 text-amber-400" />
+                <Folder className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span className="truncate">{d.name}</span>
               </button>
             </li>
@@ -192,18 +273,14 @@ export function ChatComposer({
         </ul>
       )}
       {agentHits.length > 0 && (
-        <ul
-          role="listbox"
-          aria-label="Pilih agent"
-          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
-        >
+        <ul role="listbox" aria-label="Pilih agent" className={listClass}>
           {agentHits.map((a) => (
             <li key={a.id}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pickMention('@', a.slug)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+                onClick={() => insertChip('agent', a.slug, a.slug)}
+                className={itemClass}
               >
                 <Bot className="h-4 w-4 shrink-0 text-sky-400" />
                 <span className="min-w-0 flex-1 truncate">{a.name}</span>
@@ -214,44 +291,18 @@ export function ChatComposer({
         </ul>
       )}
       {skillHits.length > 0 && (
-        <ul
-          role="listbox"
-          aria-label="Pilih skill"
-          className="absolute right-0 bottom-full left-0 z-20 mb-2 max-h-56 overflow-y-auto rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur"
-        >
+        <ul role="listbox" aria-label="Pilih skill" className={listClass}>
           {skillHits.map((s) => (
             <li key={s.id}>
               <button
                 type="button"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => pickMention('#', s.slug)}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-white/5"
+                onClick={() => insertChip('skill', s.slug, s.slug)}
+                className={itemClass}
               >
-                <Wrench className="h-4 w-4 shrink-0 text-amber-400" />
+                <Wrench className="h-4 w-4 shrink-0 text-violet-400" />
                 <span className="min-w-0 flex-1 truncate">{s.name}</span>
                 <span className="text-[11px] text-muted-foreground">#{s.slug}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-      {folders.length > 0 && (
-        <ul className="mb-2 flex flex-wrap gap-1.5" aria-label="Folder tujuan">
-          {folders.map((f) => (
-            <li
-              key={f.path}
-              title={f.path}
-              className="flex max-w-full items-center gap-1 rounded-full border border-border bg-card/80 py-1 pr-1 pl-2 text-xs"
-            >
-              <Folder className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <span className="truncate">{f.name}</span>
-              <button
-                type="button"
-                aria-label={`Hapus folder ${f.name}`}
-                onClick={() => setFolders((x) => x.filter((y) => y.path !== f.path))}
-                className="rounded-full p-0.5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
               </button>
             </li>
           ))}
@@ -282,21 +333,25 @@ export function ChatComposer({
         >
           <Paperclip className="h-4 w-4" />
         </Button>
-        <textarea
-          ref={ref}
-          value={text}
-          rows={1}
-          disabled={locked}
-          placeholder={placeholder ?? 'Tulis pesan… @agent #skill /folder'}
-          onChange={(e) => setText(e.target.value)}
-          onPaste={onPaste}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault()
-              submit()
-            }
+        <div
+          ref={editorRef}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Tulis pesan"
+          contentEditable={!locked}
+          suppressContentEditableWarning
+          spellCheck
+          data-placeholder={placeholder ?? 'Tulis pesan… @agent #skill /folder'}
+          onInput={() => {
+            sync()
+            detectTrigger()
           }}
-          className="min-h-10 flex-1 resize-none rounded-xl border border-border bg-card/70 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary disabled:opacity-60"
+          onKeyDown={onKeyDown}
+          onKeyUp={detectTrigger}
+          onClick={onEditorClick}
+          onPaste={onPaste}
+          className="chat-editor max-h-[200px] min-h-10 min-w-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card/70 px-3 py-2 text-base leading-6 break-words whitespace-pre-wrap outline-none focus:border-primary md:text-sm aria-disabled:opacity-60"
+          aria-disabled={locked}
         />
         <SettingsMenu prefs={prefs} disabled={locked} onChange={onPrefs} />
         {sending ? (
