@@ -2,7 +2,9 @@ import { Check, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import {
   EFFORTS,
+  findModelOption,
   findOption,
+  isValidModelId,
   MODELS,
   MORE_MODELS,
   PERMISSION_MODES,
@@ -18,8 +20,6 @@ const SECTIONS: Section[] = [
   { key: 'effort', title: 'Effort', options: EFFORTS },
   { key: 'permissionMode', title: 'Izin tool', options: PERMISSION_MODES },
 ]
-
-const ALL_MODELS = [...MODELS, ...MORE_MODELS]
 
 function IconBox({ option }: { option: Option }) {
   const Icon = option.icon
@@ -39,12 +39,14 @@ export function SettingsMenu({ prefs, disabled, onChange }: Props) {
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<keyof Prefs | null>(null)
   const [showMore, setShowMore] = useState(false)
+  const [customModel, setCustomModel] = useState('')
   const boxRef = useRef<HTMLDivElement>(null)
 
-  const model = findOption(ALL_MODELS, prefs.model)
+  const model = findModelOption(prefs.model)
   const effort = findOption(EFFORTS, prefs.effort)
   const ModelIcon = model.icon
   const section = SECTIONS.find((s) => s.key === view) ?? null
+  const customOk = isValidModelId(customModel.trim())
 
   useEffect(() => {
     if (!open) return
@@ -88,7 +90,8 @@ export function SettingsMenu({ prefs, disabled, onChange }: Props) {
         >
           {!section &&
             SECTIONS.map((sec) => {
-              const cur = findOption(sec.key === 'model' ? ALL_MODELS : sec.options, prefs[sec.key])
+              const cur =
+                sec.key === 'model' ? findModelOption(prefs.model) : findOption(sec.options, prefs[sec.key])
               return (
                 <button key={sec.key} type="button" role="menuitem" onClick={() => setView(sec.key)} className={rowClass}>
                   <IconBox option={cur} />
@@ -135,14 +138,45 @@ export function SettingsMenu({ prefs, disabled, onChange }: Props) {
                 )
               })}
               {section.key === 'model' && (
-                <button
-                  type="button"
-                  onClick={() => setShowMore((v) => !v)}
-                  className="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-white/5"
-                >
-                  {showMore ? 'Sembunyikan model lainnya' : 'Model lainnya'}
-                  <ChevronUp className={cn('h-3.5 w-3.5 transition-transform', !showMore && 'rotate-180')} />
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowMore((v) => !v)}
+                    className="mt-1 flex w-full items-center justify-between rounded-lg px-2 py-2 text-left text-xs text-muted-foreground transition-colors hover:bg-white/5"
+                  >
+                    {showMore ? 'Sembunyikan model lainnya' : 'Model lainnya'}
+                    <ChevronUp className={cn('h-3.5 w-3.5 transition-transform', !showMore && 'rotate-180')} />
+                  </button>
+                  <div className="mt-1 space-y-1.5 rounded-lg border border-border/60 px-2 py-2">
+                    <p className="text-[10px] text-muted-foreground">
+                      Custom / API (bukan hanya Max). Contoh: claude-sonnet-4-20250514
+                    </p>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="text"
+                        spellCheck={false}
+                        autoComplete="off"
+                        placeholder="claude-…"
+                        value={customModel}
+                        onChange={(e) => setCustomModel(e.target.value.trim())}
+                        className="min-w-0 flex-1 rounded-md border border-border bg-background/60 px-2 py-1.5 font-mono text-[11px] outline-none focus:border-primary"
+                      />
+                      <button
+                        type="button"
+                        disabled={!customOk}
+                        onClick={() => {
+                          const v = customModel.trim()
+                          if (!isValidModelId(v)) return
+                          onChange({ ...prefs, model: v })
+                          setView(null)
+                        }}
+                        className="shrink-0 rounded-md bg-primary/20 px-2.5 py-1.5 text-[11px] font-medium text-primary disabled:opacity-40"
+                      >
+                        Pakai
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
             </>
           )}

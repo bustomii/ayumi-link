@@ -26,7 +26,7 @@ export const MODELS: Option[] = [
   { value: 'claude-haiku-5-5', label: 'Haiku 5.5', hint: 'Paling cepat dan hemat', icon: Feather, tone: 'text-emerald-400' },
 ]
 
-/** Model lama, tampil di "Model lainnya". */
+/** Model lama / ID API, tampil di "Model lainnya". */
 export const MORE_MODELS: Option[] = [
   { value: 'claude-fable-5-1', label: 'Fable 5.1', hint: 'Generasi sebelumnya', icon: Gem, tone: 'text-fuchsia-400' },
   { value: 'claude-fable-5', label: 'Fable 5', hint: 'Generasi sebelumnya', icon: Gem, tone: 'text-fuchsia-400' },
@@ -37,7 +37,16 @@ export const MORE_MODELS: Option[] = [
   { value: 'claude-sonnet-5', label: 'Sonnet 5', hint: 'Generasi sebelumnya', icon: Sparkles, tone: 'text-sky-400' },
   { value: 'claude-sonnet-4-6', label: 'Sonnet 4.6', hint: 'Generasi sebelumnya', icon: Sparkles, tone: 'text-sky-400' },
   { value: 'claude-haiku-4-5', label: 'Haiku 4.5', hint: 'Cepat, tanpa pengaturan effort', icon: Feather, tone: 'text-emerald-400' },
+  // ID bertanggal (sering dipakai dengan API key Anthropic, bukan hanya Max)
+  { value: 'claude-opus-4-20250514', label: 'Opus 4 (API)', hint: 'ID API Anthropic', icon: Brain, tone: 'text-orange-400' },
+  { value: 'claude-sonnet-4-20250514', label: 'Sonnet 4 (API)', hint: 'ID API Anthropic', icon: Sparkles, tone: 'text-sky-400' },
+  { value: 'claude-3-5-haiku-20241022', label: 'Haiku 3.5 (API)', hint: 'ID API Anthropic', icon: Feather, tone: 'text-emerald-400' },
 ]
+
+/** ID model Claude Code / Anthropic API (huruf kecil). */
+export function isValidModelId(v: string): boolean {
+  return /^claude-[a-z0-9][a-z0-9._-]{0,63}$/.test(v)
+}
 
 export const EFFORTS: Option[] = [
   { value: 'low', label: 'Low', hint: 'Cepat, sedikit berpikir', icon: SignalLow, tone: 'text-emerald-400' },
@@ -56,4 +65,18 @@ export const PERMISSION_MODES: Option[] = [
 
 export function findOption(options: Option[], value: string): Option {
   return options.find((o) => o.value === value) ?? options[0]
+}
+
+/** Resolve label model; ID custom/API yang tidak di daftar tetap ditampilkan apa adanya. */
+export function findModelOption(value: string): Option {
+  const hit = [...MODELS, ...MORE_MODELS].find((o) => o.value === value)
+  if (hit) return hit
+  const short = value.startsWith('claude-') ? value.slice('claude-'.length) : value
+  return {
+    value,
+    label: short || value || 'Custom',
+    hint: 'Custom / API',
+    icon: Sparkles,
+    tone: 'text-sky-400',
+  }
 }

@@ -68,7 +68,7 @@ export function ClaudeAuthSection({ onError }: { onError: (e: unknown, action: s
       icon={KeyRound}
       tone="text-violet-400"
       title="Claude CLI"
-      description="Login akun Claude untuk chat di container/server ini."
+      description="Setup token = langganan Max/Pro. API key = billing Anthropic (boleh model di luar daftar Max)."
       aside={
         loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
@@ -123,8 +123,12 @@ export function ClaudeAuthSection({ onError }: { onError: (e: unknown, action: s
       {showForm && (
         <div className="mt-4 space-y-3 rounded-xl border border-border/60 bg-background/40 p-3">
           <p className="text-xs text-muted-foreground">
-            Di Mac jalankan <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">claude setup-token</code>,
-            salin token, lalu tempel di sini. Atau pakai API key Anthropic.
+            <strong className="font-medium text-foreground/90">Setup token</strong> (Max/Pro): di Mac/Linux jalankan{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">claude setup-token</code>, salin, tempel.
+            <br />
+            <strong className="font-medium text-foreground/90">API key</strong>: dari console Anthropic — chat memakai
+            kuota API; di composer bisa pilih / ketik ID model selain daftar Max (mis.{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">claude-sonnet-4-20250514</code>).
           </p>
           <div className="flex gap-2">
             {(

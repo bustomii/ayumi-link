@@ -2,24 +2,29 @@
 .DEFAULT_GOAL := help
 COMPOSE ?= docker compose
 
-.PHONY: help build dev service-install service-uninstall service-start service-stop service-restart service-status service-logs up up-docker redeploy down restart logs token claude-login reset-auth shell ps test docker-build
+.PHONY: help build ensure-claude dev service-install service-uninstall service-start service-stop service-restart service-status service-logs up up-docker redeploy down restart logs token claude-login reset-auth shell ps test docker-build
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
 
 # ---- Native (tanpa Docker) ----
 
+ensure-claude: ## Native: pasang CLI claude bila belum ada (Mac/Linux)
+	@chmod +x scripts/ensure-claude-cli.sh
+	@bash scripts/ensure-claude-cli.sh
+
 build: ## Native: build FE+BE and serve on http://localhost:8081
-	@chmod +x scripts/native-build.sh
+	@chmod +x scripts/native-build.sh scripts/ensure-claude-cli.sh
 	@sh scripts/native-build.sh
 
 dev: ## Native: API :8081 + Vite HMR :5173 (satu perintah)
-	@chmod +x scripts/native-dev.sh
+	@chmod +x scripts/native-dev.sh scripts/ensure-claude-cli.sh
+	@bash scripts/ensure-claude-cli.sh
 	@sh scripts/native-dev.sh
 
 # Service (macOS: LaunchAgent, Linux: systemd): setiap restart = make build lagi (lihat skill ayumi-link-native-service)
 service-install: ## Native: pasang service + start (macOS/Linux)
-	@chmod +x scripts/native-service*.sh scripts/native-build.sh
+	@chmod +x scripts/native-service*.sh scripts/native-build.sh scripts/ensure-claude-cli.sh
 	@sh scripts/native-service.sh install
 
 service-uninstall: ## Native: hapus service

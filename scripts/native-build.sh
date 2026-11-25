@@ -9,6 +9,11 @@ if [ ! -f .env ]; then
   echo "Created .env from .env.example"
 fi
 
+# CLI Claude untuk chat (Mac/Linux): instal otomatis bila belum ada.
+chmod +x "$ROOT/scripts/ensure-claude-cli.sh"
+"$ROOT/scripts/ensure-claude-cli.sh"
+export PATH="${HOME}/.local/bin:${PATH:-}"
+
 echo "==> Frontend build"
 cd frontend
 if [ ! -d node_modules ]; then

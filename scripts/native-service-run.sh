@@ -35,6 +35,10 @@ command -v go >/dev/null || { echo "go tidak ada di PATH (Homebrew / /usr/local/
 command -v node >/dev/null || { echo "node tidak ada di PATH (nvm/fnm?)" >&2; exit 1; }
 command -v npm >/dev/null || { echo "npm tidak ada di PATH" >&2; exit 1; }
 
+chmod +x "$ROOT/scripts/ensure-claude-cli.sh"
+"$ROOT/scripts/ensure-claude-cli.sh"
+export PATH="${HOME}/.local/bin:${PATH}"
+
 echo "[ayumi-link] service start → make build ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
-echo "[ayumi-link] ROOT=$ROOT go=$(command -v go) node=$(command -v node)"
+echo "[ayumi-link] ROOT=$ROOT go=$(command -v go) node=$(command -v node) claude=$(command -v claude 2>/dev/null || true)"
 exec make build

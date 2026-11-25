@@ -47,7 +47,9 @@ const cleanOutputSettings = `{"attribution":{"commit":"","pr":""},"includeCoAuth
 
 // ---- opsi yang diizinkan ----
 
-var allowedModels = map[string]bool{
+// curatedModels = daftar UI / Max aliases. ValidModel juga menerima ID API lain
+// (mis. claude-sonnet-4-20250514) agar bisa dipakai dengan ANTHROPIC_API_KEY.
+var curatedModels = map[string]bool{
 	"claude-fable-5-2": true, "claude-opus-5-5": true, "claude-sonnet-5-5": true, "claude-haiku-5-5": true,
 	// model lainnya
 	"claude-fable-5-1": true, "claude-fable-5": true, "claude-opus-5": true, "claude-opus-4-8": true,
@@ -55,13 +57,21 @@ var allowedModels = map[string]bool{
 	"claude-haiku-4-5": true,
 }
 
+// modelIDRe: alias Claude Code atau ID API Anthropic (huruf kecil, angka, . _ -).
+var modelIDRe = regexp.MustCompile(`^claude-[a-z0-9][a-z0-9._-]{0,63}$`)
+
 var allowedEfforts = map[string]bool{"low": true, "medium": true, "high": true, "xhigh": true, "max": true}
 
 // bypassPermissions sengaja tidak boleh dipilih dari UI.
 var allowedPermissionModes = map[string]bool{"manual": true, "acceptEdits": true, "auto": true, "plan": true}
 
 // ValidModel, ValidEffort, ValidPermissionMode dipakai API untuk memvalidasi preferensi.
-func ValidModel(v string) bool          { return allowedModels[v] }
+func ValidModel(v string) bool {
+	if curatedModels[v] {
+		return true
+	}
+	return modelIDRe.MatchString(v)
+}
 func ValidEffort(v string) bool         { return allowedEfforts[v] }
 func ValidPermissionMode(v string) bool { return allowedPermissionModes[v] }
 
@@ -233,7 +243,7 @@ func (r *Runner) Start(ctx context.Context, o ChatOptions) (<-chan Event, error)
 	args := []string{"-p", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
 		"--permission-mode", r.permission(o.PermissionMode),
 		"--append-system-prompt", cleanOutputPrompt, "--settings", cleanOutputSettings}
-	if allowedModels[o.Model] {
+	if ValidModel(o.Model) {
 		args = append(args, "--model", o.Model)
 	}
 	if eff := effortFor(o.Model, o.Effort); eff != "" {
