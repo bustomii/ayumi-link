@@ -156,3 +156,58 @@ func (s *Store) SetPrefs(p Prefs) error {
 	defer s.mu.Unlock()
 	return s.writeAtomic("prefs.json", p)
 }
+
+// ---- ikon PWA / branding ----
+
+// Branding: ikon + warna latar aplikasi (PWA / favicon).
+type Branding struct {
+	Icon      string `json:"icon"`
+	Bg        string `json:"bg"`
+	Fg        string `json:"fg"`
+	UpdatedAt int64  `json:"updatedAt"`
+}
+
+func (s *Store) Branding() (Branding, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var b Branding
+	raw, err := os.ReadFile(s.path("branding.json"))
+	if err != nil || json.Unmarshal(raw, &b) != nil {
+		return Branding{}, false
+	}
+	return b, true
+}
+
+func (s *Store) SetBranding(b Branding) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.writeAtomic("branding.json", b)
+}
+
+// WriteBrandingPNG menyimpan PNG ikon (192 / 512 / apple).
+func (s *Store) WriteBrandingPNG(name string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(s.dir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(s.path(name), data, 0o600)
+}
+
+func (s *Store) BrandingPNG(name string) ([]byte, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	b, err := os.ReadFile(s.path(name))
+	if err != nil || len(b) == 0 {
+		return nil, false
+	}
+	return b, true
+}
+
+func (s *Store) ClearBranding() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, n := range []string{"branding.json", "branding-192.png", "branding-512.png", "branding-apple.png"} {
+		_ = os.Remove(s.path(n))
+	}
+}

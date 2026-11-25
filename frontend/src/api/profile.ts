@@ -1,4 +1,5 @@
 import type { Prefs } from '@/lib/chat-options'
+import type { PwaBranding } from '@/lib/pwa-branding'
 import type { SetupInfo } from './auth'
 import { api } from './http'
 
@@ -39,6 +40,13 @@ export const fetchProfile = () => api<ProfileData>('/api/profile')
 export const fetchPrefs = () => api<Prefs>('/api/profile/prefs')
 
 export const savePrefs = (prefs: Prefs) => api<Prefs>('/api/profile/prefs', { method: 'PUT', json: prefs })
+
+export const fetchBranding = () => api<PwaBranding>('/api/profile/branding')
+
+export const saveBranding = (body: { icon: string; bg: string; fg: string }) =>
+  api<PwaBranding>('/api/profile/branding', { method: 'PUT', json: body })
+
+export const resetBranding = () => api<PwaBranding>('/api/profile/branding', { method: 'DELETE' })
 
 export const changePassword = (body: { currentPassword: string; newPassword: string; code: string }) =>
   api<{ ok: true }>('/api/profile/password', { method: 'POST', json: body })

@@ -23,18 +23,26 @@ const csp = "default-src 'self'; " +
 // mountStatic menyajikan hasil build frontend dari dir: file statis apa adanya, dan
 // `index.html` untuk rute klien (mis. /s/<id>) supaya reload dan tautan langsung berfungsi.
 // Rute /api tidak pernah jatuh ke index.html.
-func mountStatic(app *fiber.App, dir string) bool {
+func mountStatic(app *fiber.App, dir string, s *Server) bool {
 	index := filepath.Join(dir, "index.html")
 	if st, err := os.Stat(index); err != nil || st.IsDir() {
 		return false
+	}
+
+	// Branding / favicon / PWA icons (sebelum Static agar override jalan).
+	if s != nil {
+		s.mountBrandingAssets(app, dir)
 	}
 
 	// Aset ber-hash dari Vite aman di-cache selamanya.
 	app.Static("/assets", filepath.Join(dir, "assets"), fiber.Static{
 		Compress: true, MaxAge: 365 * 24 * 3600,
 	})
-	// Manifest PWA butuh MIME yang benar; jangan andalkan deteksi ekstensi Fiber/Static.
+	// Manifest PWA: inject ikon + theme dari branding.
 	app.Get("/manifest.webmanifest", func(c *fiber.Ctx) error {
+		if s != nil {
+			return s.dynamicManifest(c, dir)
+		}
 		c.Set(fiber.HeaderCacheControl, "no-cache")
 		c.Set(fiber.HeaderContentType, "application/manifest+json; charset=utf-8")
 		return c.SendFile(filepath.Join(dir, "manifest.webmanifest"))

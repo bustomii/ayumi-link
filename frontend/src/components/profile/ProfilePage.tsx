@@ -5,6 +5,7 @@ import { ClaudeAuthSection } from '@/components/profile/ClaudeAuthSection'
 import { LoginSessionsSection } from '@/components/profile/LoginSessionsSection'
 import { ChangePasswordDialog } from '@/components/profile/ChangePasswordDialog'
 import { PrefsSection } from '@/components/profile/PrefsSection'
+import { PwaIconSection } from '@/components/profile/PwaIconSection'
 import { Section } from '@/components/profile/Section'
 import { ServerSection } from '@/components/profile/ServerSection'
 import { TwoFactorSection } from '@/components/profile/TwoFactorSection'
@@ -113,6 +114,7 @@ export function ProfilePage({ prefs, onPrefs, onBack, onOpenSidebar, onLogout, u
               </Section>
 
               <ClaudeAuthSection onError={(e, a) => showError(e, a)} />
+              <PwaIconSection onError={(e, a) => showError(e, a)} />
               <TwoFactorSection profile={data} onChanged={() => void reload()} />
               <LoginSessionsSection profile={data} onChanged={() => void reload()} onError={(e, a) => showError(e, a)} />
               <PrefsSection prefs={prefs} onPrefs={onPrefs} />

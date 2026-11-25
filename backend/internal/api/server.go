@@ -169,6 +169,9 @@ func New(d Deps) *fiber.App {
 	p.Get("/profile", s.getProfile)
 	p.Get("/profile/prefs", s.getPrefs)
 	p.Put("/profile/prefs", s.putPrefs)
+	p.Get("/profile/branding", s.getBranding)
+	p.Put("/profile/branding", s.putBranding)
+	p.Delete("/profile/branding", s.resetBranding)
 	p.Post("/profile/password", authLimit, s.changePassword)
 	p.Post("/profile/recovery", authLimit, s.regenerateRecovery)
 	p.Post("/profile/2fa/begin", authLimit, s.twoFactorBegin)
@@ -188,9 +191,12 @@ func New(d Deps) *fiber.App {
 	api.Use(func(c *fiber.Ctx) error { return fiber.NewError(fiber.StatusNotFound, "tidak ditemukan") })
 
 	if dir := d.Config.StaticDir; dir != "" {
-		if !mountStatic(app, dir) {
+		if !mountStatic(app, dir, s) {
 			log.Printf("PERINGATAN: AYUMI_STATIC_DIR=%s tidak berisi index.html; frontend tidak disajikan", dir)
 		}
+	} else {
+		// Tanpa static dir (tes / API-only): tetap sajikan branding publik.
+		s.mountBrandingAssets(app, "")
 	}
 	return app
 }
