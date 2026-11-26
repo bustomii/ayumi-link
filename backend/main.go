@@ -54,6 +54,9 @@ func main() {
 		}
 	}
 
+	if err := store.EnsureDataDir(cfg.DataDir); err != nil {
+		log.Fatalf("gagal menyiapkan folder data: %v", err)
+	}
 	st := store.New(cfg.DataDir)
 	authMgr, err := auth.Open(cfg.DataDir)
 	if err != nil {

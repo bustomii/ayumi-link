@@ -17,3 +17,21 @@ workspace/
 .idea/
 .vscode/
 CLOUDE.md
+
+# data runtime per perangkat (akun, token, pengaturan) bila AYUMI_DATA_DIR ada di dalam repo
+agents-skills.json
+auth.json
+claude-cli-auth.json
+prefs.json
+sessions.json
+state.json
+tools-tabs.json
+branding.json
+branding-*.png
+browser-profile/
+# subfolder data (diberi awalan "/" agar source di backend/internal/ tidak ikut terabaikan)
+/uploads/
+/browser/
+/backend/uploads/
+/backend/browser/
+.ayumi/
