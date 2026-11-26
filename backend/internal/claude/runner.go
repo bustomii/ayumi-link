@@ -320,7 +320,7 @@ func (r *Runner) Start(ctx context.Context, o ChatOptions) (<-chan Event, error)
 
 		gotResult, streamed := false, false
 		sc := bufio.NewScanner(stdout)
-		sc.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
+		sc.Buffer(make([]byte, 0, 64*1024), maxJSONLLine)
 		for sc.Scan() {
 			ev := parseStreamLine(sc.Bytes())
 			switch ev.kind {

@@ -47,7 +47,7 @@ func latestTrackedBackups(jsonlPath string) map[string]backupMeta {
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLLine)
 	var latest map[string]backupMeta
 	for sc.Scan() {
 		var raw struct {

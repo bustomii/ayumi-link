@@ -45,7 +45,7 @@ func cwdFromJSONL(jsonlPath string) string {
 	}
 	defer f.Close()
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLLine)
 	for sc.Scan() {
 		var raw map[string]any
 		if json.Unmarshal(sc.Bytes(), &raw) != nil {
@@ -96,7 +96,7 @@ func firstUserPrompt(jsonlPath string) string {
 	defer f.Close()
 
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLLine)
 	for sc.Scan() {
 		var raw map[string]any
 		if json.Unmarshal(sc.Bytes(), &raw) != nil {
@@ -219,7 +219,7 @@ func LoadMessages(jsonlPath string) ([]Message, error) {
 	var msgs []Message
 	var pendingTools []string
 	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 8*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxJSONLLine)
 	for sc.Scan() {
 		var raw map[string]any
 		if json.Unmarshal(sc.Bytes(), &raw) != nil {
@@ -382,3 +382,7 @@ func placeUserBeforeEarlyReplies(msgs []Message, user Message) []Message {
 	msgs[i] = user
 	return msgs
 }
+
+// maxJSONLLine: batas satu baris transcript/stream. Tool result (mis. file besar atau gambar base64)
+// bisa mencapai beberapa MB; batas kecil membuat seluruh session gagal dimuat dengan 500.
+const maxJSONLLine = 64 * 1024 * 1024
